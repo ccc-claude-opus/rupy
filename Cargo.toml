@@ -1,0 +1,89 @@
+[package]
+name = "rupy"
+version = "0.1.0"
+edition = "2021"
+description = "A typed subset of Python compiled to readable Rust, or straight to WebAssembly, with numpy / scikit-learn / gymnasium / PyTorch subsets (formerly py0, the `ruai py` command)"
+license = "MIT"
+repository = "https://github.com/ccc-claude-opus/rupy"
+readme = "README.md"
+keywords = ["python", "compiler", "transpiler", "webassembly", "numpy"]
+categories = ["compilers", "development-tools", "wasm", "command-line-utilities"]
+exclude = ["/bench", "/web/*.wasm", "/web/rupy_wasm.mjs"]
+
+# docs.rs: the runtime packages too
+[package.metadata.docs.rs]
+features = ["http", "re", "numpy", "sklearn", "gymnasium", "torch", "plot"]
+
+[dependencies]
+# the runtime of translated programs (pyrt)
+indexmap = "2"
+# the translator (feature `translator`)
+ruff_python_parser = { version = "0.0.20", optional = true }
+ruff_python_ast = { version = "0.0.20", optional = true }
+ruff_text_size = { version = "0.0.20", optional = true }
+ruff_source_file = { version = "0.0.20", optional = true }
+serde_json = { version = "1", optional = true }
+# Python's `re` (feature `re`)
+regex = { version = "1", optional = true }
+# `rupy.http` (feature `http`): an HTTP client with TLS
+ureq = { version = "3", optional = true }
+# calling CPython libraries from rupy programs (feature `python`)
+pyo3 = { version = "0.30", optional = true, features = ["auto-initialize"] }
+# gymnasium, torch and ruai.plot run on ruai's engine
+ruai = { version = "5.0.0", path = "../ruai", optional = true, default-features = false }
+
+[target.'cfg(unix)'.dependencies]
+# time.strftime (the local time zone)
+libc = "0.2"
+
+[features]
+default = ["cli"]
+# the `rupy` command and `ruai-agent`
+cli = ["translator", "re", "http"]
+# the rupy → Rust and rupy → WebAssembly compilers
+translator = ["re", "dep:serde_json", "dep:ruff_python_parser", "dep:ruff_python_ast", "dep:ruff_text_size", "dep:ruff_source_file"]
+# runtime packages of translated programs
+re = ["dep:regex"]
+http = ["dep:ureq"]
+numpy = []
+sklearn = ["numpy"]
+gymnasium = ["numpy", "dep:ruai", "ruai/world"]
+torch = ["numpy", "dep:ruai", "ruai/nn"]
+plot = ["numpy", "dep:ruai", "ruai/plot"]
+python = ["dep:pyo3"]
+
+[[bin]]
+name = "rupy"
+path = "src/main.rs"
+required-features = ["cli"]
+doc = false
+
+# `ruai py ...` (ruai runs `ruai-NAME` from PATH for commands it does not have)
+[[bin]]
+name = "ruai-py"
+path = "src/bin/ruai-py.rs"
+required-features = ["cli"]
+doc = false
+
+# `ruai agent ...`: teams of LLM agents, a rupy program (src/agent/*.py)
+[[bin]]
+name = "ruai-agent"
+path = "src/bin/ruai-agent.rs"
+required-features = ["cli"]
+doc = false
+
+# the rupy → WebAssembly compiler for browsers (web/build.sh)
+[[example]]
+name = "rupy_wasm"
+crate-type = ["cdylib"]
+required-features = ["translator"]
+
+[profile.release]
+opt-level = 3
+
+[profile.test]
+opt-level = 2
+
+[dev-dependencies]
+# tests compare floats read from Python's JSON output exactly
+serde_json = { version = "1", features = ["float_roundtrip"] }

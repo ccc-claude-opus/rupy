@@ -1,0 +1,3 @@
+"""rupy: more of the builtin module `time`."""
+
+def strftime(format: str) -> str: ...
