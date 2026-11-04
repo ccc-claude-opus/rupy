@@ -424,7 +424,9 @@ fn pyo3_module(file: &str, out: Option<PathBuf>) -> i32 {
     let target = dir.join("target");
     let mut cargo = Command::new("cargo");
     cargo.args(["build", "--release"]).current_dir(&dir).env("CARGO_TARGET_DIR", &target).env("PYO3_PYTHON", project::python());
-    project::cap_lints(&mut cargo);
+    // an extension module leaves Python's symbols to the interpreter that loads it
+    let link: &[&str] = if cfg!(target_os = "macos") { &["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"] } else { &[] };
+    project::cap_lints(&mut cargo, link);
     let r = cargo.status();
     if !r.map(|s| s.success()).unwrap_or(false) {
         return 1;
@@ -645,7 +647,7 @@ fn test(args: &[String]) -> i32 {
     if !bins.is_empty() {
         let mut cargo = Command::new("cargo");
         cargo.args(["build", "--release", "--quiet"]).current_dir(&dir).env("CARGO_TARGET_DIR", dir.join("target"));
-        project::cap_lints(&mut cargo);
+        project::cap_lints(&mut cargo, &[]);
         if let Some(py) = &bridge_python {
             cargo.env("PYO3_PYTHON", py);
         }
@@ -747,7 +749,7 @@ fn fuzz(n: u64, seed: u64) -> i32 {
     std::fs::write(dir.join("Cargo.toml"), project::cargo_toml("fuzz", &bins)).unwrap();
     let mut cargo = Command::new("cargo");
     cargo.args(["build", "--release", "--quiet"]).current_dir(&dir).env("CARGO_TARGET_DIR", dir.join("target"));
-    project::cap_lints(&mut cargo);
+    project::cap_lints(&mut cargo, &[]);
     let out = cargo.output().expect("cargo");
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);

@@ -104,15 +104,22 @@ pub fn write_project(dir: &Path, name: &str, rust: &str) -> std::io::Result<()> 
 
 /// Lints of generated code are only warnings, even under `RUSTFLAGS="-D warnings"`
 /// (as in CI): a Python program may bind `X` or assign a value it never reads.
-pub fn cap_lints(c: &mut Command) {
+/// Without RUSTFLAGS nothing is set, so a project's own `.cargo/config.toml`
+/// rustflags (the link arguments of a PyO3 module on macOS) still apply; with
+/// it, they would not, so `extra` flags are added after the user's.
+pub fn cap_lints(c: &mut Command, extra: &[&str]) {
+    let mut flags: Vec<String> = vec!["--cap-lints".into(), "warn".into()];
+    flags.extend(extra.iter().map(|f| f.to_string()));
     match std::env::var("CARGO_ENCODED_RUSTFLAGS") {
         Ok(f) if !f.is_empty() => {
-            c.env("CARGO_ENCODED_RUSTFLAGS", format!("{f}\x1f--cap-lints\x1fwarn"));
+            c.env("CARGO_ENCODED_RUSTFLAGS", format!("{f}\x1f{}", flags.join("\x1f")));
         }
-        _ => {
-            let f = std::env::var("RUSTFLAGS").unwrap_or_default();
-            c.env("RUSTFLAGS", format!("{f} --cap-lints warn").trim_start());
-        }
+        _ => match std::env::var("RUSTFLAGS") {
+            Ok(f) if !f.trim().is_empty() => {
+                c.env("RUSTFLAGS", format!("{f} {}", flags.join(" ")));
+            }
+            _ => {}
+        },
     }
 }
 
@@ -120,7 +127,7 @@ pub fn cap_lints(c: &mut Command) {
 pub fn build(dir: &Path, name: &str, target: &Path, quiet: bool) -> Result<PathBuf, String> {
     let mut c = Command::new("cargo");
     c.arg("build").arg("--release").current_dir(dir).env("CARGO_TARGET_DIR", target);
-    cap_lints(&mut c);
+    cap_lints(&mut c, &[]);
     // a program calling Python modules links the interpreter that has them
     let main = std::fs::read_to_string(dir.join("src/main.rs")).unwrap_or_default();
     let modules = python_modules_of(&main);
