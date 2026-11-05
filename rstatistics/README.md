@@ -1,4 +1,4 @@
-# rstat
+# rstatistics
 
 R's probability and statistics functions in pure Python, with R's numbers and R's
 printed output. There are no dependencies: vectors are plain `list[float]`.
@@ -7,10 +7,8 @@ printed output. There are no dependencies: vectors are plain `list[float]`.
 pip install rstatistics
 ```
 
-The package installs as `rstatistics` and is imported as `rstat`.
-
 ```python
-import rstat as r
+import rstatistics as r
 
 x = [5.1, 4.9, 6.2, 5.8, 6.0, 5.5, 5.3, 6.1]
 print(r.t_test(x, mu=5.0))
@@ -54,7 +52,7 @@ R's names, with `_` for `.`: `t.test` is `t_test`, `lower.tail` is `lower_tail`,
 
 ### Random numbers
 
-R keeps one generator for the session; rstat passes it explicitly. After
+R keeps one generator for the session; rstatistics passes it explicitly. After
 `set_seed(n)` the numbers are R's after `set.seed(n)` (Mersenne-Twister, normal
 numbers by inversion, R ≥ 3.6's rejection sampling):
 
@@ -70,14 +68,14 @@ print(r.print_vector(g.rnorm(5)))
 `python tests/run.py` compares them (`--regen` reruns R first). The printed output
 of the tests, `format`, `summary`, `quantile` and the random numbers is identical
 to R's; distribution functions agree with R to a relative 1e-12. One difference:
-R names the data of a test from the call (`data:  c(20, 30, 25, 25)`), rstat from
+R names the data of a test from the call (`data:  c(20, 30, 25, 25)`), rstatistics from
 the `data_name` argument (default `x`, `x and y`, ...).
 
 ## rupy
 
-rstat is written in [rupy](https://github.com/ccc-claude-opus/rupy)'s typed subset
+rstatistics is written in [rupy](https://github.com/ccc-claude-opus/rupy)'s typed subset
 of Python, and rupy has it built in: `rupy run` compiles a program that imports
-rstat to Rust, `rupy wasm` to WebAssembly, with the same output as CPython.
+rstatistics to Rust, `rupy wasm` to WebAssembly, with the same output as CPython.
 
 ## License
 

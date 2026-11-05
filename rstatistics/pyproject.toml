@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rstatistics"
-version = "0.1.0"
+version = "0.1.1"
 description = "R's probability and statistics functions in pure Python: d/p/q/r distributions, t.test and friends, summary, quantile, with R's numbers and R's printed output"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -19,7 +19,7 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ccc-claude-opus/rupy/tree/main/rstat"
+Homepage = "https://github.com/ccc-claude-opus/rupy/tree/main/rstatistics"
 
 [tool.setuptools]
-packages = ["rstat"]
+packages = ["rstatistics"]

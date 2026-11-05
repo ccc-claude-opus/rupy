@@ -4,9 +4,9 @@ name R takes from the call is the `data_name` argument ("x", "x and y")."""
 
 import math
 
-from rstat.describe import Named, cor, mean, var
-from rstat.distributions import dbinom, pbinom, pchisq, pf, pnorm, pt, qbeta, qf, qnorm, qt
-from rstat.rformat import format_vec, format_num, format_pval, print_named
+from rstatistics.describe import Named, cor, mean, var
+from rstatistics.distributions import dbinom, pbinom, pchisq, pf, pnorm, pt, qbeta, qf, qnorm, qt
+from rstatistics.rformat import format_vec, format_num, format_pval, print_named
 
 
 class HTest:

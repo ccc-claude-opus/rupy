@@ -1,4 +1,4 @@
-"""rstat against R: every tests/<name>.py prints what tests/<name>.R prints in
+"""rstatistics against R: every tests/<name>.py prints what tests/<name>.R prints in
 R (the R output is kept in tests/<name>.out). Printed results must match
 exactly; dist.py's 17-digit numbers within a relative 1e-12.
 
@@ -36,7 +36,7 @@ def main() -> int:
         diffs = [i for i in range(max(len(want), len(got))) if i >= len(want) or i >= len(got) or not same(want[i], got[i])]
         print(f"{name}: {'ok' if not diffs else str(len(diffs)) + ' lines differ'}")
         for i in diffs[:5]:
-            print(f"  line {i + 1}: R {want[i] if i < len(want) else '-'!r}, rstat {got[i] if i < len(got) else '-'!r}")
+            print(f"  line {i + 1}: R {want[i] if i < len(want) else '-'!r}, rstatistics {got[i] if i < len(got) else '-'!r}")
         bad += len(diffs) > 0
     return 1 if bad else 0
 

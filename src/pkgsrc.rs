@@ -1,4 +1,4 @@
-//! Packages written in rupy (`.py` sources, like `rstat`): their files are
+//! Packages written in rupy (`.py` sources, like `rstatistics`): their files are
 //! appended to the program like local modules, with every top-level name
 //! renamed `PKG__name` so they cannot clash with the program's names. The
 //! program's `import PKG as A` / `A.name` and `from PKG import name` are
@@ -15,13 +15,13 @@ use ruff_text_size::{Ranged, TextRange};
 /// Packages written in rupy that are built into rupy (a browser has no files):
 /// (package, file name, source).
 const BUILTIN: &[(&str, &str, &str)] = &[
-    ("rstat", "__init__.py", include_str!("../rstat/rstat/__init__.py")),
-    ("rstat", "distributions.py", include_str!("../rstat/rstat/distributions.py")),
-    ("rstat", "describe.py", include_str!("../rstat/rstat/describe.py")),
-    ("rstat", "htest.py", include_str!("../rstat/rstat/htest.py")),
-    ("rstat", "rformat.py", include_str!("../rstat/rstat/rformat.py")),
-    ("rstat", "rng.py", include_str!("../rstat/rstat/rng.py")),
-    ("rstat", "special.py", include_str!("../rstat/rstat/special.py")),
+    ("rstatistics", "__init__.py", include_str!("../rstatistics/rstatistics/__init__.py")),
+    ("rstatistics", "distributions.py", include_str!("../rstatistics/rstatistics/distributions.py")),
+    ("rstatistics", "describe.py", include_str!("../rstatistics/rstatistics/describe.py")),
+    ("rstatistics", "htest.py", include_str!("../rstatistics/rstatistics/htest.py")),
+    ("rstatistics", "rformat.py", include_str!("../rstatistics/rstatistics/rformat.py")),
+    ("rstatistics", "rng.py", include_str!("../rstatistics/rstatistics/rng.py")),
+    ("rstatistics", "special.py", include_str!("../rstatistics/rstatistics/special.py")),
 ];
 
 /// The files of package `name`: `DIR/name/*.py` (with an `__init__.py`) in the

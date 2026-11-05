@@ -1,5 +1,5 @@
-"""rstat: densities, distribution functions and quantiles at R's 7 digits."""
-import rstat as r
+"""rstatistics: densities, distribution functions and quantiles at R's 7 digits."""
+import rstatistics as r
 
 print(r.format_num(r.pnorm(1.96)))
 print(r.format_num(r.pnorm(-1.5)))

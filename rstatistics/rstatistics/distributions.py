@@ -1,11 +1,11 @@
 """Probability distributions in R's naming: for each, d (density or mass), p
 (distribution function), q (quantile); `r` (random numbers) is a method of
-rstat.RNG. Arguments are R's (`lower.tail` is `lower_tail`, `log.p` is
+rstatistics.RNG. Arguments are R's (`lower.tail` is `lower_tail`, `log.p` is
 `log_p`, `lambda` is `lambda_`); functions take and return floats."""
 
 import math
 
-from rstat.special import EPS, LN_SQRT_2PI, dnorm0, lbeta, lchoose, lgamma, pbeta_raw, pgamma_raw, pnorm0, qnorm0
+from rstatistics.special import EPS, LN_SQRT_2PI, dnorm0, lbeta, lchoose, lgamma, pbeta_raw, pgamma_raw, pnorm0, qnorm0
 
 
 def _out(p: float, lower_tail: bool, log_p: bool) -> float:

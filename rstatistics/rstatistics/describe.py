@@ -3,7 +3,7 @@ the nine quantile types) and R's printed form (named vectors, `summary`)."""
 
 import math
 
-from rstat.rformat import format_vec, format_num, print_named, signif
+from rstatistics.rformat import format_vec, format_num, print_named, signif
 
 
 class Named:

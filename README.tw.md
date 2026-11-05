@@ -206,10 +206,10 @@ print(policy, logits, obs, reward)
 
 `import gymnasium as gym` 是 `ruai::world` 的環境套上 Gymnasium 的 Python API（觀測值是 float32 的 numpy 陣列，與 Gymnasium 逐位元相同）；`import torch` 是建在 ruai nn 引擎上的 PyTorch 子集：autograd、`nn.Linear` 等模組、`nn.Sequential`、損失函數、`optim.SGD` / `Adam`、`torch.no_grad()`。`torch.manual_seed` 重現 PyTorch 的亂數產生器（MT19937），所以 `rand`、`randn` 與 `nn.Linear` 的初始權重都與 PyTorch 相同；張量與模組的印出格式也一樣。`tests/corpus/gymnasium/`、`tests/corpus/torch/` 以真的 Gymnasium 與 PyTorch 對照（訓練迴圈在 PyTorch 預設的 4 位小數下相同）。差異：模型用 `nn.Sequential` 或持有各層的一般類別（不能繼承 `nn.Module`），`parameters()` 回傳 list；dtype 在 rupy 中是字串；矩陣乘積與元素函數可能與 PyTorch 的 BLAS / 向量化實作在最後一位不同。
 
-### rupy 的 rstat（R 的機率統計）
+### rupy 的 rstatistics（R 的機率統計）
 
 ```python
-import rstat as r
+import rstatistics as r
 
 x = [5.1, 4.9, 6.2, 5.8, 6.0, 5.5, 5.3, 6.1]
 print(r.t_test(x, mu=5.0))
@@ -219,7 +219,7 @@ g = r.set_seed(42)
 print(r.print_vector(g.rnorm(5)))
 ```
 
-`import rstat as r` 是 R 的機率統計函數：17 種分佈的 `d` / `p` / `q`、`set_seed` 之後與 R 相同的亂數（Mersenne-Twister、反函數法的常態亂數、`sample`）、`t_test`、`var_test`、`chisq_test`、`binom_test`、`prop_test`、`cor_test`、`summary`、`quantile`（九種）等，印出格式與 R 一字不差。名稱沿用 R，`.` 改成 `_`（`t.test` → `t_test`、`lower.tail` → `lower_tail`）。rstat 是用 rupy 本身寫成的套件（`rstat/`，在 PyPI 上是純 Python、無依賴），rupy 把它的原始碼和程式一起編譯，所以 Rust 與 wasm 後端都能用。`rstat/tests/run.py` 與 R 4.6 對照：印出結果相同，分佈函數的相對誤差在 1e-12 內。
+`import rstatistics as r` 是 R 的機率統計函數：17 種分佈的 `d` / `p` / `q`、`set_seed` 之後與 R 相同的亂數（Mersenne-Twister、反函數法的常態亂數、`sample`）、`t_test`、`var_test`、`chisq_test`、`binom_test`、`prop_test`、`cor_test`、`summary`、`quantile`（九種）等，印出格式與 R 一字不差。名稱沿用 R，`.` 改成 `_`（`t.test` → `t_test`、`lower.tail` → `lower_tail`）。rstatistics 是用 rupy 本身寫成的套件（`rstatistics/`，在 PyPI 上是純 Python、無依賴），rupy 把它的原始碼和程式一起編譯，所以 Rust 與 wasm 後端都能用。`rstatistics/tests/run.py` 與 R 4.6 對照：印出結果相同，分佈函數的相對誤差在 1e-12 內。
 
 ## 測試
 

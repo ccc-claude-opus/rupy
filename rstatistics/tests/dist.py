@@ -1,4 +1,4 @@
-import rstat as r
+import rstatistics as r
 
 print(f"{r.pnorm(1.96):.17g}")
 print(f"{r.pnorm(-1.5):.17g}")

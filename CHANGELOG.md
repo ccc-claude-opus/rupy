@@ -2,13 +2,13 @@
 
 ## Unreleased
 
-- **rstat**, R's probability and statistics functions, in `rstat/` (on PyPI as `rstatistics`, pure Python,
+- **rstatistics**, R's probability and statistics functions, in `rstatistics/` (`pip install rstatistics`, pure Python,
   no dependencies): `d`/`p`/`q` of 17 distributions, R's random numbers after `set_seed`
   (Mersenne-Twister, inversion, `sample`), `t_test`, `var_test`, `chisq_test`, `binom_test`,
   `prop_test`, `cor_test`, `summary`, `quantile` (types 1–9), `cor`, `mad`, `fivenum`, ...,
-  printed as R prints them (formatReal, `print.htest`). `rstat/tests/run.py` compares it with
+  printed as R prints them (formatReal, `print.htest`). `rstatistics/tests/run.py` compares it with
   R 4.6: printed output identical, distribution functions within a relative 1e-12.
-- **Packages written in rupy**: `import rstat` compiles rstat's source with the program (the
+- **Packages written in rupy**: `import rstatistics` compiles its source with the program (the
   source is built into rupy), its top-level names renamed so they cannot clash with the
   program's; it works on the Rust and the wasm backends.
 - The builtin `format(value, spec)`; `math.log1p`, `math.expm1`, `math.nan`.

@@ -1,5 +1,4 @@
-"""rstat: R's random numbers after set.seed (Mersenne-Twister, inversion, sample)."""
-import rstat as r
+import rstatistics as r
 
 
 def p(xs: list[float]) -> None:

@@ -141,16 +141,16 @@ name are overloads, `@rust("...")` gives a Rust path or an expression template, 
   browser, `savefig` writes SVG or HTML; limits and ticks as matplotlib's.
 - **rupy.json**, **rupy.http**: a typed JSON value and an HTTP(S) client, with CPython
   stand-ins in `python/rupy/`.
-- **rstat**: R's probability and statistics functions (`d`/`p`/`q` of 17 distributions,
+- **rstatistics**: R's probability and statistics functions (`d`/`p`/`q` of 17 distributions,
   `set_seed` with R's random numbers, `t_test` and the other common tests, `summary`,
   `quantile`, ...), printed as R prints them. Unlike the packages above it is written in
-  rupy itself (`rstat/`, also on PyPI as pure Python: `pip install rstatistics`): rupy compiles its source with the
+  rupy itself (`rstatistics/`, also on PyPI as pure Python: `pip install rstatistics`): rupy compiles its source with the
   program, so it runs on the Rust and the wasm backends alike. See
-  [rstat/README.md](rstat/README.md).
+  [rstatistics/README.md](rstatistics/README.md).
 
 Under CPython the same programs import the real modules (matplotlib for `ruai.plot`);
-`tests/corpus/numpy`, `sklearn`, `gymnasium`, `torch`, `plot` and `rstat` compare the two
-(`rstat/tests/run.py` compares rstat with R itself).
+`tests/corpus/numpy`, `sklearn`, `gymnasium`, `torch`, `plot` and `rstatistics` compare the two
+(`rstatistics/tests/run.py` compares rstatistics with R itself).
 
 ```python
 import shlex

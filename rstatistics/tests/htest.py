@@ -1,4 +1,4 @@
-import rstat as r
+import rstatistics as r
 
 x = [5.1, 4.9, 6.2, 5.8, 6.0, 5.5, 5.3, 6.1]
 y = [4.8, 5.2, 5.0, 5.6, 4.7, 5.1, 4.9, 5.3]

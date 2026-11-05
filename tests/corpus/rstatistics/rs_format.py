@@ -1,4 +1,5 @@
-from rstat import format, print_vector
+"""rstatistics: R's format() of numeric vectors (formatReal)."""
+from rstatistics import format, print_vector
 
 print("".join("<" + c + ">" for c in format([1.5, 2.25, 3.0], 7)), "")
 print("".join("<" + c + ">" for c in format([0.1, 0.123456789, 100.0], 7)), "")

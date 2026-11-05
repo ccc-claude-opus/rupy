@@ -3,14 +3,14 @@
 Dieter's algorithm, and `sample`'s rejection sampling (R ≥ 3.6). A seeded
 RNG gives the numbers R gives after `set.seed` with the same seed:
 
-    rng = rstat.set_seed(42)
+    rng = rstatistics.set_seed(42)
     rng.rnorm(3)        # R: set.seed(42); rnorm(3)
 
-(R keeps one generator in the session; rstat passes it explicitly.)"""
+(R keeps one generator in the session; rstatistics passes it explicitly.)"""
 
 import math
 
-from rstat.special import qnorm0
+from rstatistics.special import qnorm0
 
 N = 624
 M = 397

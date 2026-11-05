@@ -151,9 +151,9 @@ pub fn build(dir: &Path, name: &str, target: &Path, quiet: bool) -> Result<PathB
 }
 
 /// PYTHONPATH for running programs under CPython: the stand-ins of rupy's
-/// packages (`python/`: `rupy.json`, ...) and the packages written in rupy (`rstat`).
+/// packages (`python/`: `rupy.json`, ...) and the packages written in rupy (`rstatistics`).
 pub fn python_path() -> std::ffi::OsString {
-    std::env::join_paths([rupy_dir().join("python"), rupy_dir().join("rstat")]).unwrap_or_default()
+    std::env::join_paths([rupy_dir().join("python"), rupy_dir().join("rstatistics")]).unwrap_or_default()
 }
 
 /// The Python used as the reference (`PY2RS_PYTHON`, else python3).

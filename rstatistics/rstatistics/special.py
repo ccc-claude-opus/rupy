@@ -1,5 +1,5 @@
 """Special functions: log-gamma, the normal distribution function, and the
-regularized incomplete gamma and beta functions (the base of rstat's
+regularized incomplete gamma and beta functions (the base of rstatistics's
 distributions). Written from the published algorithms (Lanczos; Marsaglia's
 series and Laplace's continued fraction for the normal tail; series and
 continued fractions evaluated by Lentz's method)."""
