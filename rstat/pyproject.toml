@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "rupy-rstat"
+name = "rstatistics"
 version = "0.1.0"
 description = "R's probability and statistics functions in pure Python: d/p/q/r distributions, t.test and friends, summary, quantile, with R's numbers and R's printed output"
 readme = "README.md"

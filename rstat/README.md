@@ -4,10 +4,10 @@ R's probability and statistics functions in pure Python, with R's numbers and R'
 printed output. There are no dependencies: vectors are plain `list[float]`.
 
 ```
-pip install rupy-rstat
+pip install rstatistics
 ```
 
-The package installs as `rupy-rstat` and is imported as `rstat`.
+The package installs as `rstatistics` and is imported as `rstat`.
 
 ```python
 import rstat as r
