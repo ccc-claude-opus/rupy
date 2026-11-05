@@ -210,6 +210,12 @@ fn test_wasm(args: &[String]) -> i32 {
         if src.starts_with("# error: ") {
             continue;
         }
+        // a known difference of the wasm backend, reported with the unsupported programs
+        if let Some(why) = src.lines().find_map(|l| l.strip_prefix("# wasm: skip ")) {
+            unsupported += 1;
+            *reasons.entry(why.trim_matches(|c| c == '(' || c == ')').to_string()).or_default() += 1;
+            continue;
+        }
         let Some(fpy) = pythons.for_program(&src) else { continue };
         let sub = dir.join(project::crate_name(f.parent().unwrap_or(Path::new("."))));
         match wasm_temp(&f, &sub) {

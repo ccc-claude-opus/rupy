@@ -16,6 +16,10 @@
   (`\xa0`, `\u2028`, ...), like CPython.
 - Fixed: `Tensor.ndim` (its stub named a method that does not exist); `rupy test` with no
   arguments looks in `tests/corpus`.
+- `np.linalg.det` as NumPy computes it (sign · exp(Σ log |u_ii|)): `det([[1, 2], [3, 4]])` is
+  `-2.0000000000000004`, as in NumPy, not `-2.0`.
+- A corpus file may say `# wasm: skip (reason)`: `rupy test --wasm` counts it with the
+  unsupported programs. Known: transcendental functions on wasm are not correctly rounded.
 
 ## 0.1.0
 

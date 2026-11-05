@@ -207,6 +207,12 @@ otherwise when the GC collects it after the program ends its run. The host loads
 `rupy_lib.wasm` (from `io.lib`, else next to `rupy_wasm.mjs`) only for programs that
 use packages.
 
+A known difference: `log`, `exp` and the other transcendental functions of the wasm
+backend (JavaScript's `Math` for programs, Rust's libm for `rupy_lib.wasm`) are not
+correctly rounded, so a result can differ from CPython's in the last bit (`math.log(3)`
+is `1.0986122886681096`, not `...098`). A corpus program that shows it is marked
+`# wasm: skip (reason)`, and `rupy test --wasm` counts it with the unsupported ones.
+
 Not yet supported by the wasm backend: generators, functions as values (lambdas work as
 `key=` arguments), `nonlocal`, files, `re`, `heapq`, `itertools`, `random`, exception
 fields, and `ruai.plot`.

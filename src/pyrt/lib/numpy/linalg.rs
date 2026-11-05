@@ -216,9 +216,20 @@ pub fn solve(a: &NdArray, b: &NdArray) -> Result<NdArray, PyErr> {
 /// `np.linalg.det(a)`
 pub fn det(a: &NdArray) -> Result<NdArray, PyErr> {
     let (n, m) = square(a)?;
+    // as NumPy: sign · exp(Σ log|u_ii|) (its det comes from slogdet), not the product
     let d = match lu(n, m, &mut []) {
         None => 0.0,
-        Some((lu, sign)) => (0..n).fold(sign, |p, i| p * lu[i * n + i]),
+        Some((lu, sign)) => {
+            let (mut s, mut logdet) = (sign, 0.0);
+            for i in 0..n {
+                let u = lu[i * n + i];
+                if u < 0.0 {
+                    s = -s;
+                }
+                logdet += u.abs().ln();
+            }
+            s * logdet.exp()
+        }
     };
     Ok(NdArray::from_scalar(Scalar::F(d)))
 }
