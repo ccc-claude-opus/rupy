@@ -48,6 +48,13 @@ impl<'a> W<'a> {
             StmtKind::Pass => {}
             StmtKind::Assign(t, e) => {
                 self.expr(e)?;
+                if let Target::Var(v) = t {
+                    if self.fx.drops.contains(v) {
+                        // the variable's previous package object: no one else holds it
+                        let l = self.fx.vars[v];
+                        self.free_obj(l, &e.ty)?;
+                    }
+                }
                 self.assign(t, &e.ty)?;
             }
             StmtKind::AugVar(v, op, e) => {

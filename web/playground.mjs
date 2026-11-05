@@ -76,6 +76,16 @@ except IndexError as e:
     print("IndexError:", e)
 print(10 // 3, -7 % 3, 2 ** 62, 1 / 3)
 `,
+  "NumPy": `import numpy as np
+
+a = np.arange(12).reshape((3, 4))
+print(a)
+print(a.sum(axis=0), a.mean(), a[:, 1:3])
+b = np.linspace(0.0, 1.0, 5)
+print(b * 2 + 1, np.sqrt(b))
+rng = np.random.default_rng(42)
+print(rng.random(3))
+`,
   "Primes": `def primes(n: int) -> list[int]:
     sieve = [True] * (n + 1)
     sieve[0] = False

@@ -86,7 +86,7 @@ impl<'a> W<'a> {
     }
 
     /// host_check(): raise the error of the last host operation, if any.
-    fn rt_host_check(&mut self) -> Res<u32> {
+    pub fn rt_host_check(&mut self) -> Res<u32> {
         let take = self.rt_take_str()?;
         self.rt_fn("host_check", |w| {
             let (failed, pending) = (w.host(H::Failed), w.host(H::Pending));

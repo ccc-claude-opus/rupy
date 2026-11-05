@@ -6,6 +6,7 @@ description = "A typed subset of Python compiled to readable Rust, or straight t
 license = "MIT"
 repository = "https://github.com/ccc-claude-opus/rupy"
 readme = "README.md"
+default-run = "rupy"
 keywords = ["python", "compiler", "transpiler", "webassembly", "numpy"]
 categories = ["compilers", "development-tools", "wasm", "command-line-utilities"]
 exclude = ["/bench", "/web/*.wasm", "/web/rupy_wasm.mjs"]

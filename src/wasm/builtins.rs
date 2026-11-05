@@ -367,7 +367,7 @@ impl<'a> W<'a> {
                 self.expr(&a[1])?;
                 self.c().ref_eq();
             }
-            "index" => return unsupported("numpy-style indexing"),
+            "index" => return self.pkg_index(a, &e.ty),
             "unpack" => return unsupported("unpacking this value"),
             "input" => {
                 if !a.is_empty() {

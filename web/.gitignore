@@ -1,3 +1,4 @@
 # built by build.sh
 rupy.wasm
 rupy_wasm.mjs
+rupy_lib.wasm

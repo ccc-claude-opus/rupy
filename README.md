@@ -192,9 +192,24 @@ The translator itself builds for `wasm32-unknown-unknown` (`examples/rupy_wasm.r
 interface: `alloc`, `compile`, `out_ptr`, `out_len`), so `web/` is a playground that
 compiles rupy in the browser: `sh web/build.sh`, then serve `web/` over HTTP.
 
+**Packages implemented in Rust** (numpy, sklearn, gymnasium, torch, `rupy.json`, `shlex`,
+`fnmatch`, `html`) run in their own wasm module, `rupy_lib.wasm`, built once by
+`rupy wasm-lib [-o OUT]` (cargo and the `wasm32-unknown-unknown` target; `rupy wasm`
+builds it when a program needs it and puts it next to the host). A program holds no
+package code: each package function it calls sends its arguments to the host as tokens
+(numbers, strings; lists as their length and items) and reads its result back; package
+objects stay in `rupy_lib.wasm`, which the program refers to by handle. The dispatcher of
+`rupy_lib.wasm` is generated from the package stubs (`src/wasm/bridge.rs`): for each
+function rupy translates a one-line Python wrapper, so it calls the package exactly as a
+translated program does. A package object is freed when it was a temporary argument of
+another package call, when a variable that only held such objects gets a new one, or
+otherwise when the GC collects it after the program ends its run. The host loads
+`rupy_lib.wasm` (from `io.lib`, else next to `rupy_wasm.mjs`) only for programs that
+use packages.
+
 Not yet supported by the wasm backend: generators, functions as values (lambdas work as
 `key=` arguments), `nonlocal`, files, `re`, `heapq`, `itertools`, `random`, exception
-fields, and the packages implemented in Rust.
+fields, and `ruai.plot`.
 
 ## Rust crates
 

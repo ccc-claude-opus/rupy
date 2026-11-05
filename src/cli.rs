@@ -23,6 +23,8 @@ commands:
   wasm  FILE.py [-o OUT.wasm] compile to WebAssembly without Rust (WasmGC); also writes
                              rupy_wasm.mjs, its host: node rupy_wasm.mjs OUT.wasm
   wasm  --run FILE.py        compile to WebAssembly and run it with Node.js
+  wasm-lib [-o OUT.wasm] [-v] rupy_lib.wasm: the packages implemented in Rust (numpy,
+                             sklearn, torch, ...) for programs compiled to WebAssembly
   test  [FILES|DIRS...]      differential test against CPython (default tests/corpus/)
   test  --wasm [FILES|DIRS...]
                              the same for the WebAssembly backend (needs Node.js 22+)
@@ -65,6 +67,19 @@ pub fn main(args: &[String]) -> i32 {
             pyo3_module(&args[1], out)
         }
         Some("wasm") if args.len() == 3 && args[1] == "--run" => wasm_run(&args[2]),
+        Some("wasm-lib") => {
+            let out = match args.iter().position(|a| a == "-o") {
+                Some(i) if i + 1 < args.len() => PathBuf::from(&args[i + 1]),
+                _ => PathBuf::from("rupy_lib.wasm"),
+            };
+            match wasm_lib(&out, args.iter().any(|a| a == "-v")) {
+                Ok(()) => 0,
+                Err(e) => {
+                    eprintln!("rupy wasm-lib: {}", e);
+                    1
+                }
+            }
+        }
         Some("wasm") if args.len() >= 2 => {
             let out = match args.iter().position(|a| a == "-o") {
                 Some(i) if i + 1 < args.len() => Some(PathBuf::from(&args[i + 1])),
@@ -101,13 +116,46 @@ fn wasm(file: &str, out: Option<PathBuf>) -> i32 {
         }
     };
     let out = out.unwrap_or_else(|| Path::new(file).with_extension("wasm"));
-    let host = out.parent().unwrap_or(Path::new(".")).join("rupy_wasm.mjs");
+    let dir = out.parent().unwrap_or(Path::new("."));
+    let host = dir.join("rupy_wasm.mjs");
     if let Err(e) = std::fs::write(&out, &bytes).and_then(|_| std::fs::write(&host, rupy::wasm::HOST_JS)) {
         eprintln!("error: {}", e);
         return 1;
     }
-    println!("wrote {} ({} bytes) and {}: node {} {}", out.display(), bytes.len(), host.display(), host.display(), out.display());
+    let mut also = String::new();
+    if uses_lib(&bytes) {
+        match lib_next_to(dir) {
+            Ok(p) => also = format!(", {}", p.display()),
+            Err(e) => {
+                eprintln!("{}", e);
+                return 1;
+            }
+        }
+    }
+    println!("wrote {} ({} bytes){} and {}: node {} {}", out.display(), bytes.len(), also, host.display(), host.display(), out.display());
     0
+}
+
+/// Whether a compiled program calls packages implemented in Rust (it exports `rupy_lib`).
+fn uses_lib(wasm: &[u8]) -> bool {
+    wasm.windows(8).any(|w| w == b"rupy_lib")
+}
+
+/// `rupy_lib.wasm`, built once per run of rupy.
+fn lib_path() -> Result<PathBuf, String> {
+    static LIB: std::sync::OnceLock<Result<PathBuf, String>> = std::sync::OnceLock::new();
+    LIB.get_or_init(|| build_wasm_lib(false)).clone()
+}
+
+/// Copy `rupy_lib.wasm` into `dir` (where the host looks for it).
+fn lib_next_to(dir: &Path) -> Result<PathBuf, String> {
+    let lib = lib_path()?;
+    let to = dir.join("rupy_lib.wasm");
+    let same = std::fs::metadata(&to).ok().map(|m| m.len()) == std::fs::metadata(&lib).ok().map(|m| m.len()) && std::fs::read(&to).ok() == std::fs::read(&lib).ok();
+    if !same {
+        std::fs::copy(&lib, &to).map_err(|e| format!("{}: {}", to.display(), e))?;
+    }
+    Ok(to)
 }
 
 /// Write a program's wasm and the host to a temporary directory → (host, wasm).
@@ -119,6 +167,9 @@ fn wasm_temp(file: &Path, dir: &Path) -> Result<(PathBuf, PathBuf), String> {
         std::fs::write(&host, rupy::wasm::HOST_JS).map_err(|e| e.to_string())?;
     }
     let out = dir.join(format!("{}.wasm", project::crate_name(file)));
+    if uses_lib(&bytes) {
+        lib_next_to(dir)?;
+    }
     std::fs::write(&out, bytes).map_err(|e| e.to_string())?;
     Ok((host, out))
 }
@@ -206,7 +257,7 @@ fn test_wasm(args: &[String]) -> i32 {
             println!("  python printed {} lines, wasm {}", sa.lines().count(), sb.lines().count());
         }
     }
-    if std::env::var("RUAI_WASM_REASONS").is_ok() {
+    if std::env::var("RUPY_WASM_REASONS").is_ok() {
         for (r, n) in &reasons {
             println!("  unsupported ({}): {}", n, r);
         }
@@ -390,6 +441,67 @@ fn cache_target() -> PathBuf {
     }
 }
 
+/// The dispatcher crate of `rupy_lib.wasm`, written to `dir` (see `rupy::wasm::bridge`).
+fn wasm_lib_project(dir: &Path, verbose: bool) -> Result<(), String> {
+    let lib = rupy::wasm::bridge::generate()?;
+    if verbose {
+        for s in &lib.skipped {
+            eprintln!("skipped {}", s);
+        }
+    }
+    let feats: Vec<String> = lib.features.iter().map(|f| format!("{:?}", f)).collect();
+    let rupy = if project::rupy_dir().join("src/pyrt/mod.rs").exists() {
+        format!("path = {:?}", project::rupy_dir())
+    } else {
+        format!("version = {:?}", env!("CARGO_PKG_VERSION"))
+    };
+    let toml = format!(
+        "[package]\nname = \"rupy_lib\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\ncrate-type = [\"cdylib\"]\n\n\
+         [dependencies]\nrupy = {{ {}, default-features = false, features = [{}] }}\nregex = \"1\"\n\n\
+         # Python ints never wrap: overflow is reported instead\n[profile.release]\noverflow-checks = true\nlto = true\n\n[workspace]\n",
+        rupy,
+        feats.join(", ")
+    );
+    let write = |p: &Path, s: &str| -> Result<(), String> {
+        // unchanged files keep their time, so cargo does not rebuild
+        if std::fs::read_to_string(p).ok().as_deref() == Some(s) {
+            return Ok(());
+        }
+        std::fs::write(p, s).map_err(|e| format!("{}: {}", p.display(), e))
+    };
+    std::fs::create_dir_all(dir.join("src")).map_err(|e| e.to_string())?;
+    write(&dir.join("Cargo.toml"), &toml)?;
+    write(&dir.join("src/lib.rs"), rupy::wasm::bridge::LIB_RT)?;
+    write(&dir.join("src/wrappers.rs"), &lib.wrappers)?;
+    write(&dir.join("src/dispatch.rs"), &lib.dispatch)?;
+    Ok(())
+}
+
+/// `rupy wasm-lib [-o OUT]`: build `rupy_lib.wasm` (cached).
+fn wasm_lib(out: &Path, verbose: bool) -> Result<(), String> {
+    let path = build_wasm_lib(verbose)?;
+    std::fs::copy(&path, out).map_err(|e| format!("{}: {}", out.display(), e))?;
+    println!("{}", out.display());
+    Ok(())
+}
+
+/// Build `rupy_lib.wasm` in the cache: its path.
+pub fn build_wasm_lib(verbose: bool) -> Result<PathBuf, String> {
+    let dir = cache_target().join("wasm-lib");
+    wasm_lib_project(&dir, verbose)?;
+    let mut cargo = Command::new("cargo");
+    cargo.args(["build", "--release", "--target", "wasm32-unknown-unknown"]).current_dir(&dir).env("CARGO_TARGET_DIR", dir.join("target"));
+    if !verbose {
+        cargo.arg("--quiet");
+    }
+    project::cap_lints(&mut cargo, &[]);
+    let st = cargo.status().map_err(|e| format!("cargo: {}", e))?;
+    if !st.success() {
+        return Err("building rupy_lib.wasm failed (is the wasm32-unknown-unknown target installed? rustup target add wasm32-unknown-unknown)".into());
+    }
+    Ok(dir.join("target/wasm32-unknown-unknown/release/rupy_lib.wasm"))
+}
+
 /// `rupy pyo3 FILE.py [-o DIR]`: an extension module `DIR/<name>.so`.
 fn pyo3_module(file: &str, out: Option<PathBuf>) -> i32 {
     let path = Path::new(file);
@@ -483,7 +595,7 @@ fn run(file: &str, args: &[String]) -> i32 {
 /// Python files under the arguments (default: tests/).
 fn files(args: &[String]) -> Vec<PathBuf> {
     let roots: Vec<PathBuf> = if args.is_empty() {
-        vec![Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("rupy")]
+        vec![Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("corpus")]
     } else {
         args.iter().map(PathBuf::from).collect()
     };

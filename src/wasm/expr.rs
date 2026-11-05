@@ -200,6 +200,14 @@ impl<'a> W<'a> {
                     _ => self.c().f64_convert_i64_s(),
                 };
             }
+            X::Call(f, args) if self.p.funcs[*f].ext.is_some() => {
+                let fi = self.user[*f];
+                self.pkg_call_freeing(None, args, fi)?;
+            }
+            X::Method(recv, f, args) if self.p.funcs[*f].ext.is_some() => {
+                let fi = self.user[*f];
+                self.pkg_call_freeing(Some(recv), args, fi)?;
+            }
             X::Call(f, args) => {
                 self.args(*f, args)?;
                 let fi = self.user[*f];
@@ -342,7 +350,12 @@ impl<'a> W<'a> {
     fn new_obj(&mut self, c: ClassId, args: &[Expr]) -> Res<()> {
         let cl = &self.p.classes[c];
         if cl.ext.is_some() {
-            return unsupported(format!("`{}` (implemented in Rust)", cl.name));
+            // constructed in rupy_lib.wasm
+            let Some(init) = cl.init else { return unsupported(format!("constructing `{}`", cl.name)) };
+            self.args(init, args)?;
+            let fi = self.user[init];
+            self.c().call(fi);
+            return Ok(());
         }
         let ct = self.class_ty[c];
         let fields: Vec<Ty> = cl.fields.iter().map(|f| f.ty.clone()).collect();

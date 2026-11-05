@@ -643,7 +643,7 @@ fn sub_blocks(s: &Stmt) -> Vec<&Vec<Stmt>> {
     s.blocks()
 }
 
-fn stmt_exprs(s: &Stmt, f: &mut dyn FnMut(&Expr)) {
+pub(crate) fn stmt_exprs(s: &Stmt, f: &mut dyn FnMut(&Expr)) {
     match &s.kind {
         StmtKind::Expr(e) | StmtKind::Del(e) => f(e),
         StmtKind::Assign(t, e) => {

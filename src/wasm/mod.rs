@@ -12,7 +12,9 @@
 //! variables, files, `re` and the Rust-backed packages report "the wasm
 //! backend does not support ...".
 
+pub mod bridge;
 mod builtins;
+mod pkg;
 mod enc;
 mod expr;
 mod host;
@@ -44,8 +46,12 @@ pub fn compile_source(src: &str) -> Result<Vec<u8>, String> {
 
 /// Compile a checked program.
 pub fn compile(p: &Program) -> Res<Vec<u8>> {
-    if !p.crates.is_empty() || !p.python_modules.is_empty() {
-        return unsupported("Rust crates, packages implemented in Rust or Python modules");
+    // packages implemented in Rust run in rupy_lib.wasm (see `bridge`)
+    if !p.python_modules.is_empty() {
+        return unsupported("Python modules");
+    }
+    if let Some(c) = p.crates.iter().find(|c| !bridge::lib_has(c)) {
+        return unsupported(format!("`{}` (a Rust crate, or a package rupy_lib.wasm does not have)", c));
     }
     let mut w = W::new(p);
     w.program()?;
@@ -100,6 +106,17 @@ pub(crate) enum H {
     Item,
     /// the error kind of the last operation (0: none; its message is pending)
     Failed,
+    /// the next int token of a package result
+    RInt,
+    /// the next float token of a package result
+    RFloat,
+    /// the next str token of a package result → pending, its length
+    RStr,
+    /// a token for handle h (an externref): when the program drops it, the
+    /// host frees the handle in rupy_lib.wasm
+    Track,
+    /// free handle h now (and forget its token)
+    Free,
 }
 
 /// A label of the block structure (for `br` depths).
@@ -124,6 +141,8 @@ pub(crate) struct Fx {
     pub finals: Vec<Vec<Stmt>>,
     pub fid: Option<FuncId>,
     pub ret: Option<Val>,
+    /// package objects held only by these variables: freed when reassigned
+    pub drops: std::collections::HashSet<VarId>,
     pub next_label: u32,
 }
 
@@ -172,10 +191,20 @@ const IMPORTS: &[(&str, &[Val], &[Val])] = &[
     ("take", &[Val::I32], &[]),
     ("item", &[Val::I32], &[Val::I32]),
     ("failed", &[], &[Val::I32]),
+    ("r_int", &[], &[Val::I64]),
+    ("r_float", &[], &[Val::F64]),
+    ("r_str", &[], &[Val::I32]),
+    ("track", &[Val::I32], &[Val::Ref(Heap::Extern)]),
+    ("free", &[Val::I32, Val::Ref(Heap::Extern)], &[]),
 ];
 
 /// Error kinds of host operations (host.mjs `KINDS`).
-pub(crate) const HOST_ERRORS: &[&str] = &["", "ValueError", "TypeError", "OverflowError", "IndexError", "EOFError", "ZeroDivisionError", "KeyError"];
+pub(crate) const HOST_ERRORS: &[&str] = &[
+    "", "ValueError", "TypeError", "OverflowError", "IndexError", "EOFError", "ZeroDivisionError", "KeyError",
+    // from packages (rupy_lib.wasm)
+    "RuntimeError", "NotImplementedError", "AttributeError", "OSError", "FileNotFoundError", "AssertionError",
+    "LookupError", "ArithmeticError", "Exception",
+];
 
 impl<'a> W<'a> {
     fn new(p: &'a Program) -> W<'a> {
@@ -257,12 +286,7 @@ impl<'a> W<'a> {
             }
             Ty::Dict(..) | Ty::Set(_) => Val::Ref(Heap::Idx(self.t.dict)),
             Ty::Tuple(ts) => Val::Ref(Heap::Idx(self.tuple_ty(ts)?)),
-            Ty::Class(c) | Ty::Obj(c) => {
-                if self.p.classes[*c].ext.is_some() {
-                    return unsupported(format!("the type `{}` of a package", self.p.classes[*c].name));
-                }
-                Val::Ref(Heap::Idx(self.class_ty[*c]))
-            }
+            Ty::Class(c) | Ty::Obj(c) => Val::Ref(Heap::Idx(self.class_ty[*c])),
             Ty::Optional(i) => match self.val(i)? {
                 Some(Val::I64) => Val::Ref(Heap::Idx(self.t.box_i64)),
                 Some(Val::F64) => Val::Ref(Heap::Idx(self.t.box_f64)),
@@ -307,6 +331,9 @@ impl<'a> W<'a> {
         }
         for (c, cl) in self.p.classes.iter().enumerate() {
             if cl.ext.is_some() {
+                // a package object: (class id, handle in rupy_lib.wasm, its token for the GC)
+                let fs = vec![(Storage::Val(Val::I32), false), (Storage::Val(Val::I32), false), (Storage::Val(Val::Ref(Heap::Extern)), false)];
+                self.m.types[self.class_ty[c] as usize] = SubType { comp: Comp::Struct(fs), sup: None, open: true };
                 continue;
             }
             let mut fs = vec![(Storage::Val(Val::I32), false)];
@@ -381,9 +408,19 @@ impl<'a> W<'a> {
             let i = self.reserve();
             self.user.push(i);
         }
+        let used = pkg::used_package_funcs(self.p);
         for (fid, f) in self.p.funcs.iter().enumerate() {
             if f.ext.is_some() {
-                return unsupported(format!("`{}` (implemented in Rust)", f.name));
+                if used[fid] {
+                    self.bridge_fn(fid)?;
+                } else {
+                    // never called: no bridge code
+                    self.fx = Fx::default();
+                    self.c().unreachable();
+                    let idx = self.user[fid];
+                    self.define(idx, vec![]);
+                }
+                continue;
             }
             self.func(fid)?;
         }
@@ -400,6 +437,10 @@ impl<'a> W<'a> {
         let run = self.reserve();
         self.define(run, vec![Val::I32]);
         self.m.exports.push(("run".into(), run));
+        // the program calls packages: the host loads rupy_lib.wasm for it
+        if self.p.funcs.iter().any(|f| f.ext.is_some()) {
+            self.m.exports.push(("rupy_lib".into(), run));
+        }
         // last: string constants (all are known now), then module constants
         self.fx = Fx::default();
         let mut keys: Vec<(String, u32)> = self.strs.iter().map(|(k, v)| (k.clone(), *v)).collect();
@@ -428,7 +469,7 @@ impl<'a> W<'a> {
         if !f.captures.is_empty() && assigns_capture(f) {
             return unsupported("a nested function that rebinds a variable of the enclosing function (nonlocal)");
         }
-        self.fx = Fx { fid: Some(fid), ..Default::default() };
+        self.fx = Fx { fid: Some(fid), drops: pkg::droppable_vars(self.p, fid), ..Default::default() };
         let mut params = vec![];
         if let Some(sv) = f.self_var {
             let v = self.val(&f.vars[sv].ty)?.unwrap();

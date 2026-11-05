@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- **The wasm backend runs the packages implemented in Rust** (numpy, sklearn, gymnasium,
+  torch, `rupy.json`, `shlex`, `fnmatch`, `html`), in browsers too. They are compiled
+  once by cargo into `rupy_lib.wasm` (`rupy wasm-lib`), whose dispatcher is generated from
+  the package stubs: for each function, rupy translates a Python wrapper, so the call is
+  the one a translated program makes. Programs send arguments and read results as tokens
+  through the host, and refer to package objects by handle; temporaries and objects of
+  variables that get a new one are freed at once, the rest when the GC collects them.
+  All 15 programs of the numpy, sklearn, torch and gymnasium corpus match CPython on
+  wasm; 241 of the corpus's 263 programs now compile to wasm (221 before) and all match.
+- The package stubs are built into rupy, so the compiler in a browser has them.
+- `repr()` of strings on the wasm backend escapes what `str.isprintable()` rejects
+  (`\xa0`, `\u2028`, ...), like CPython.
+- Fixed: `Tensor.ndim` (its stub named a method that does not exist); `rupy test` with no
+  arguments looks in `tests/corpus`.
+
 ## 0.1.0
 
 rupy is py0, the typed subset of Python that was `ruai py` in ruai 3.2–4.5, made its own

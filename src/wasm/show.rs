@@ -267,13 +267,14 @@ impl<'a> W<'a> {
         self.rt_fn("str_repr", |w| {
             let (st, bytes, sbt) = (w.t.str, w.t.bytes, w.t.sb);
             w.fx.params = vec![Val::Ref(Heap::Idx(st))];
-            let (b, i, n, c, q, sb, sq, dq) = (
+            let (b, i, n, c, q, sb, sq, dq, hi) = (
                 w.fx.local(Val::Ref(Heap::Idx(bytes))),
                 w.fx.local(Val::I32),
                 w.fx.local(Val::I32),
                 w.fx.local(Val::I32),
                 w.fx.local(Val::I32),
                 w.fx.local(Val::Ref(Heap::Idx(sbt))),
+                w.fx.local(Val::I32),
                 w.fx.local(Val::I32),
                 w.fx.local(Val::I32),
             );
@@ -283,8 +284,14 @@ impl<'a> W<'a> {
             w.c().local_get(i).local_get(n).i32_ge_u().br_if(1);
             w.c().local_get(b).local_get(i).array_get_u(bytes).local_tee(c).i32_const(39).i32_eq().local_get(sq).i32_or().local_set(sq);
             w.c().local_get(c).i32_const(34).i32_eq().local_get(dq).i32_or().local_set(dq);
+            w.c().local_get(c).i32_const(0x80).i32_ge_u().local_get(hi).i32_or().local_set(hi);
             w.c().local_get(i).i32_const(1).i32_add().local_set(i).br(0);
             w.c().end().end();
+            // non-ASCII: which characters are printable is the host's (Unicode) business
+            w.c().local_get(hi).if_(Block::Empty).local_get(0);
+            w.host_arg(&Ty::Str)?;
+            w.host_call("str_repr", &Ty::Str)?;
+            w.c().return_().end();
             w.c().i32_const(34).i32_const(39).local_get(sq).local_get(dq).i32_eqz().i32_and().select().local_set(q);
             w.c().local_get(n).i32_const(2).i32_add().call(sbn).local_set(sb);
             w.c().local_get(sb).local_get(q).call(byte);

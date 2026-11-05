@@ -58,6 +58,50 @@ pub fn package_stub(module: &str) -> Option<std::path::PathBuf> {
     package_dirs().into_iter().map(|d| d.join(format!("{}.pyi", module))).find(|p| p.exists())
 }
 
+/// The stubs of rupy's own packages, built in (a browser has no files).
+const BUILTIN_STUBS: &[(&str, &str)] = &[
+    ("fnmatch", include_str!("lib/fnmatch.pyi")),
+    ("gymnasium", include_str!("lib/gymnasium.pyi")),
+    ("html", include_str!("lib/html.pyi")),
+    ("matplotlib", include_str!("lib/matplotlib.pyi")),
+    ("matplotlib.pyplot", include_str!("lib/matplotlib.pyplot.pyi")),
+    ("numpy", include_str!("lib/numpy.pyi")),
+    ("os", include_str!("lib/os.pyi")),
+    ("ruai.plot", include_str!("lib/ruai.plot.pyi")),
+    ("rupy.http", include_str!("lib/rupy.http.pyi")),
+    ("rupy.json", include_str!("lib/rupy.json.pyi")),
+    ("shlex", include_str!("lib/shlex.pyi")),
+    ("sklearn.cluster", include_str!("lib/sklearn.cluster.pyi")),
+    ("sklearn.datasets", include_str!("lib/sklearn.datasets.pyi")),
+    ("sklearn.decomposition", include_str!("lib/sklearn.decomposition.pyi")),
+    ("sklearn.linear_model", include_str!("lib/sklearn.linear_model.pyi")),
+    ("sklearn.metrics", include_str!("lib/sklearn.metrics.pyi")),
+    ("sklearn.model_selection", include_str!("lib/sklearn.model_selection.pyi")),
+    ("sklearn.naive_bayes", include_str!("lib/sklearn.naive_bayes.pyi")),
+    ("sklearn.neighbors", include_str!("lib/sklearn.neighbors.pyi")),
+    ("sklearn.preprocessing", include_str!("lib/sklearn.preprocessing.pyi")),
+    ("subprocess", include_str!("lib/subprocess.pyi")),
+    ("sys", include_str!("lib/sys.pyi")),
+    ("time", include_str!("lib/time.pyi")),
+    ("torch", include_str!("lib/torch.pyi")),
+    ("torch.nn", include_str!("lib/torch.nn.pyi")),
+    ("torch.nn.functional", include_str!("lib/torch.nn.functional.pyi")),
+    ("torch.optim", include_str!("lib/torch.optim.pyi")),
+];
+
+/// The text of package `module`'s stub: its file, else the built-in copy.
+pub fn package_stub_text(module: &str) -> Option<String> {
+    if let Some(t) = package_stub(module).and_then(|p| std::fs::read_to_string(p).ok()) {
+        return Some(t);
+    }
+    BUILTIN_STUBS.iter().find(|(m, _)| *m == module).map(|(_, t)| t.to_string())
+}
+
+/// Whether there is a package `module` (a stub file, or a built-in one).
+pub fn has_package(module: &str) -> bool {
+    package_stub(module).is_some() || BUILTIN_STUBS.iter().any(|(m, _)| *m == module)
+}
+
 /// Which names of a stub the program sees.
 enum StubNames<'a> {
     /// `from M import a, b`: exactly these, unqualified.
@@ -461,7 +505,7 @@ impl Front {
                 AStmt::Import(i) => {
                     for a in &i.names {
                         let n = a.name.id.as_str();
-                        if !stdlib::MODULES.contains(&n) && package_stub(n).is_some() {
+                        if !stdlib::MODULES.contains(&n) && has_package(n) {
                             if n.contains('.') && a.asname.is_none() {
                                 return err(self.line(s), format!("`import {}` needs an alias", n))
                                     .map_err(|e| e.hint(format!("write `import {} as name` or `from {} import ...`", n, n)));
@@ -476,7 +520,7 @@ impl Front {
                         }
                         self.imports.insert(n.to_string());
                         // more of a builtin module, declared by the package stub `M.pyi`
-                        if stdlib::MODULES.contains(&n) && package_stub(n).is_some() && !std_extended.contains(&n.to_string()) {
+                        if stdlib::MODULES.contains(&n) && has_package(n) && !std_extended.contains(&n.to_string()) {
                             std_extended.push(n.to_string());
                         }
                     }
@@ -490,7 +534,7 @@ impl Front {
                             }
                         }
                         m if stdlib::MODULES.contains(&m) => {
-                            if package_stub(m).is_some() && !std_extended.contains(&m.to_string()) {
+                            if has_package(m) && !std_extended.contains(&m.to_string()) {
                                 std_extended.push(m.to_string());
                             }
                             for a in &i.names {
@@ -498,7 +542,7 @@ impl Front {
                                 self.from_names.insert(local, format!("{}.{}", m, a.name.id));
                             }
                         }
-                        m if !stdlib::MODULES.contains(&m) && package_stub(m).is_some() => {
+                        m if !stdlib::MODULES.contains(&m) && has_package(m) => {
                             for a in &i.names {
                                 if a.asname.is_some() {
                                     return err(self.line(s), "`from PACKAGE import x as y` is not supported");
@@ -713,8 +757,8 @@ impl Front {
     /// module of its declarations (default `rupy::pyrt::lib::M`); a `# crate:
     /// pyrt/FEATURE` line enables that runtime feature of rupy.
     fn load_package(&mut self, module: &str, alias: Option<&str>, names: &[String], line: u32) -> Res<()> {
-        let path = package_stub(module).ok_or_else(|| Error::new(line, format!("no package `{}`", module)))?;
-        let text = std::fs::read_to_string(&path).map_err(|e| Error::new(line, e.to_string()))?;
+        let text = package_stub_text(module).ok_or_else(|| Error::new(line, format!("no package `{}`", module)))?;
+        let path = package_stub(module).unwrap_or_else(|| std::path::PathBuf::from(format!("{}.pyi", module)));
         let prefix = text
             .lines()
             .find_map(|l| l.trim().strip_prefix("# rust:"))
@@ -908,7 +952,7 @@ impl Front {
                 }
                 // `from numpy import ndarray`: another package's names
                 AStmt::ImportFrom(i)
-                    if i.module.as_ref().is_some_and(|m| m.id.as_str() != "rust" && package_stub(m.id.as_str()).is_some()) =>
+                    if i.module.as_ref().is_some_and(|m| m.id.as_str() != "rust" && has_package(m.id.as_str())) =>
                 {
                     let m = i.module.as_ref().unwrap().id.to_string();
                     let ns: Vec<String> = i.names.iter().map(|a| a.name.id.to_string()).collect();
