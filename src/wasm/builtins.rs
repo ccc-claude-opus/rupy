@@ -84,6 +84,27 @@ impl<'a> W<'a> {
                 self.expr(&a[0])?;
                 self.emit_repr(&a[0].ty)?;
             }
+            "format" => {
+                // the value and the spec into locals first: the spec may call the host too
+                let (vt, st) = (self.val(&a[0].ty)?.unwrap(), self.val(&Ty::Str)?.unwrap());
+                let (vl, sl) = (self.fx.local(vt), self.fx.local(st));
+                self.expr(&a[0])?;
+                self.c().local_set(vl);
+                self.expr(&a[1])?;
+                self.c().local_set(sl);
+                self.c().local_get(vl);
+                match &a[0].ty {
+                    Ty::Int | Ty::Float => self.host_arg(&a[0].ty)?,
+                    t => {
+                        let t = t.clone();
+                        self.emit_str(&t)?;
+                        self.host_arg(&Ty::Str)?;
+                    }
+                }
+                self.c().local_get(sl);
+                self.host_arg(&Ty::Str)?;
+                self.host_call("format", &Ty::Str)?;
+            }
             "abs" => {
                 self.expr(&a[0])?;
                 match &a[0].ty {
@@ -368,7 +389,31 @@ impl<'a> W<'a> {
                 self.c().ref_eq();
             }
             "index" => return self.pkg_index(a, &e.ty),
-            "unpack" => return unsupported("unpacking this value"),
+            "unpack" => {
+                // `a, b = xs` (a list): Python's length errors, then a tuple of the elements
+                let (Ty::List(et), ExprKind::Int(n)) = (&a[0].ty, &a[1].kind) else { unreachable!() };
+                let (et, n) = (et.as_ref().clone(), *n as i32);
+                let Ty::Tuple(ts) = &e.ty else { unreachable!() };
+                let tt = self.tuple_ty(ts)?;
+                let k = self.kind(&et)?;
+                let lt = self.t.list[k as usize];
+                let (l, len) = (self.fx.local(Val::Ref(Heap::Idx(lt))), self.fx.local(Val::I32));
+                self.expr(&a[0])?;
+                self.c().local_tee(l).struct_get(lt, 1).local_set(len);
+                for got in 0..n {
+                    self.c().local_get(len).i32_const(got).i32_eq().if_(Block::Empty);
+                    self.labeled(Lab::Plain, |w| w.raise_msg("ValueError", &format!("not enough values to unpack (expected {}, got {})", n, got)))?;
+                    self.c().end();
+                }
+                self.c().local_get(len).i32_const(n).i32_gt_s().if_(Block::Empty);
+                self.labeled(Lab::Plain, |w| w.raise_msg("ValueError", &format!("too many values to unpack (expected {})", n)))?;
+                self.c().end();
+                for i in 0..n {
+                    self.c().local_get(l).i64_const(i as i64);
+                    self.list_get(&et)?;
+                }
+                self.c().struct_new(tt);
+            }
             "input" => {
                 if !a.is_empty() {
                     let out = self.rt_out()?;

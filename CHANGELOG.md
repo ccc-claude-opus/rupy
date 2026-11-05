@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **rstat**, R's probability and statistics functions, in `rstat/` (on PyPI as pure Python,
+  no dependencies): `d`/`p`/`q` of 17 distributions, R's random numbers after `set_seed`
+  (Mersenne-Twister, inversion, `sample`), `t_test`, `var_test`, `chisq_test`, `binom_test`,
+  `prop_test`, `cor_test`, `summary`, `quantile` (types 1–9), `cor`, `mad`, `fivenum`, ...,
+  printed as R prints them (formatReal, `print.htest`). `rstat/tests/run.py` compares it with
+  R 4.6: printed output identical, distribution functions within a relative 1e-12.
+- **Packages written in rupy**: `import rstat` compiles rstat's source with the program (the
+  source is built into rupy), its top-level names renamed so they cannot clash with the
+  program's; it works on the Rust and the wasm backends.
+- The builtin `format(value, spec)`; `math.log1p`, `math.expm1`, `math.nan`.
+- The wasm backend unpacks lists (`a, b = s.split("e")`), with Python's length errors.
 - **The wasm backend runs the packages implemented in Rust** (numpy, sklearn, gymnasium,
   torch, `rupy.json`, `shlex`, `fnmatch`, `html`), in browsers too. They are compiled
   once by cargo into `rupy_lib.wasm` (`rupy wasm-lib`), whose dispatcher is generated from
@@ -10,7 +21,7 @@
   through the host, and refer to package objects by handle; temporaries and objects of
   variables that get a new one are freed at once, the rest when the GC collects them.
   All 15 programs of the numpy, sklearn, torch and gymnasium corpus match CPython on
-  wasm; 241 of the corpus's 263 programs now compile to wasm (221 before) and all match.
+  wasm; 247 of the corpus's 270 programs now compile to wasm (221 before) and all match.
 - The package stubs are built into rupy, so the compiler in a browser has them.
 - `repr()` of strings on the wasm backend escapes what `str.isprintable()` rejects
   (`\xa0`, `\u2028`, ...), like CPython.

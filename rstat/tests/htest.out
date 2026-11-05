@@ -1,0 +1,134 @@
+
+	One Sample t-test
+
+data:  x
+t = 3.5696, df = 7, p-value = 0.009101
+alternative hypothesis: true mean is not equal to 5
+95 percent confidence interval:
+ 5.206762 6.018238
+sample estimates:
+mean of x 
+   5.6125 
+
+
+	Welch Two Sample t-test
+
+data:  x and y
+t = 2.6853, df = 11.47, p-value = 0.02053
+alternative hypothesis: true difference in means is not equal to 0
+95 percent confidence interval:
+ 0.09912788 0.97587212
+sample estimates:
+mean of x mean of y 
+   5.6125    5.0750 
+
+
+	Two Sample t-test
+
+data:  x and y
+t = 2.6853, df = 14, p-value = 0.01776
+alternative hypothesis: true difference in means is not equal to 0
+95 percent confidence interval:
+ 0.1081838 0.9668162
+sample estimates:
+mean of x mean of y 
+   5.6125    5.0750 
+
+
+	Paired t-test
+
+data:  x and y
+t = 2.8451, df = 7, p-value = 0.02486
+alternative hypothesis: true mean difference is not equal to 0
+95 percent confidence interval:
+ 0.09076769 0.98423231
+sample estimates:
+mean difference 
+         0.5375 
+
+
+	One Sample t-test
+
+data:  x
+t = 0.65565, df = 7, p-value = 0.7335
+alternative hypothesis: true mean is less than 5.5
+95 percent confidence interval:
+     -Inf 5.937584
+sample estimates:
+mean of x 
+   5.6125 
+
+
+	F test to compare two variances
+
+data:  x and y
+F = 2.771, num df = 7, denom df = 7, p-value = 0.2021
+alternative hypothesis: true ratio of variances is not equal to 1
+95 percent confidence interval:
+  0.5547665 13.8409354
+sample estimates:
+ratio of variances 
+          2.771008 
+
+
+	Chi-squared test for given probabilities
+
+data:  c(20, 30, 25, 25)
+X-squared = 2, df = 3, p-value = 0.5724
+
+
+	Pearson's Chi-squared test with Yates' continuity correction
+
+data:  matrix(c(12, 5, 7, 9), 2, byrow = TRUE)
+X-squared = 1.456, df = 1, p-value = 0.2276
+
+
+	Exact binomial test
+
+data:  7 and 20
+number of successes = 7, number of trials = 20, p-value = 0.2632
+alternative hypothesis: true probability of success is not equal to 0.5
+95 percent confidence interval:
+ 0.1539092 0.5921885
+sample estimates:
+probability of success 
+                  0.35 
+
+
+	1-sample proportions test with continuity correction
+
+data:  15 out of 40, null probability 0.5
+X-squared = 2.025, df = 1, p-value = 0.1547
+alternative hypothesis: true p is not equal to 0.5
+95 percent confidence interval:
+ 0.2317406 0.5419036
+sample estimates:
+    p 
+0.375 
+
+
+	Pearson's product-moment correlation
+
+data:  x and y
+t = 0.3053, df = 6, p-value = 0.7705
+alternative hypothesis: true correlation is not equal to 0
+95 percent confidence interval:
+ -0.6364631  0.7619464
+sample estimates:
+      cor 
+0.1236802 
+
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  4.900   5.250   5.650   5.612   6.025   6.200 
+   0%   25%   50%   75%  100% 
+4.900 5.250 5.650 6.025 6.200 
+  10%   33%   90% 
+4.900 5.294 6.200 
+[1] 4.90 5.20 5.65 6.05 6.20
+[1] 0.59304
+[1] 0.775
+[1] 5.05
+[1] 0.4853202
+[1] 0.085
+[1] 0.0952381
+[1] 0.07142857

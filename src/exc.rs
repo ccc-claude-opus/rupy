@@ -83,13 +83,13 @@ pub fn op_kinds(e: &Expr) -> (Vec<&'static str>, Vec<&'static str>) {
             "list.remove" | "list.index" | "str.index" => (vec!["ValueError"], vec![]),
             "dict.pop" | "set.remove" => (vec!["KeyError"], vec![]),
             "math.sqrt" | "math.log" => (vec!["ValueError"], vec![]),
-            "math.log2" | "math.log10" | "math.asin" | "math.acos" | "math.log2args" | "math.pow" | "math.fmod"
+            "math.log2" | "math.log10" | "math.log1p" | "math.asin" | "math.acos" | "math.log2args" | "math.pow" | "math.fmod"
             | "math.isqrt" | "math.factorial" | "math.comb" | "math.perm" | "chr" | "min_iter" | "max_iter"
-            | "str.rindex" | "powmod" => (vec![], vec!["ValueError"]),
+            | "str.rindex" | "powmod" | "format" => (vec![], vec!["ValueError"]),
             // only an empty separator raises
             "str.split" if matches!(&a[1].kind, K::Str(sep) if !sep.is_empty()) => (vec![], vec![]),
             "str.split" => (vec![], vec!["ValueError"]),
-            "math.exp" | "math.floor" | "math.ceil" | "math.trunc" | "round" | "math.sinh" | "math.cosh" => {
+            "math.exp" | "math.expm1" | "math.floor" | "math.ceil" | "math.trunc" | "round" | "math.sinh" | "math.cosh" => {
                 (vec![], vec!["ValueError", "OverflowError"])
             }
             "ord" | "str.center_fill" | "str.ljust_fill" | "str.rjust_fill" => (vec![], vec!["TypeError"]),

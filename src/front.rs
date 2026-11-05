@@ -4410,6 +4410,18 @@ impl Front {
                 };
                 Ok(self.mk(line, Ty::dict(k, v), K::Dict(vec![])))
             }
+            // format(value, spec): the spec is a string computed at run time
+            "format" => {
+                self.nargs(args, 1, 2, name, line)?;
+                self.kw(args, &[], line)?;
+                let x = self.expr(&args.args[0], None)?;
+                self.settle(&x.ty);
+                if !matches!(self.norm(&x.ty), Ty::Int | Ty::Float | Ty::Str | Ty::Bool) {
+                    return err(line, "format() takes an int, a float, a str or a bool");
+                }
+                let spec = if args.args.len() == 2 { self.arg(args, 1, &Ty::Str, "format() spec")? } else { self.mk(line, Ty::Str, K::Str(String::new())) };
+                b(self, "format", Ty::Str, vec![x, spec])
+            }
             "str" | "repr" => {
                 self.nargs(args, 1, 1, name, line)?;
                 let x = self.expr(&args.args[0], None)?;
@@ -4616,6 +4628,7 @@ impl Front {
             "pi" => "math.pi",
             "e" => "math.e",
             "inf" => "math.inf",
+            "nan" => "math.nan",
             "tau" => "math.tau",
             _ => return err(line, format!("math.{} is not supported", name)),
         };
@@ -4624,7 +4637,7 @@ impl Front {
 
     fn math(&mut self, name: &str, args: &ast::Arguments, line: u32) -> Res<Expr> {
         self.kw(args, &[], line)?;
-        let f1: &[&str] = &["sqrt", "exp", "sin", "cos", "tan", "asin", "acos", "atan", "fabs", "log2", "log10", "sinh", "cosh", "tanh"];
+        let f1: &[&str] = &["sqrt", "exp", "sin", "cos", "tan", "asin", "acos", "atan", "fabs", "log2", "log10", "sinh", "cosh", "tanh", "log1p", "expm1"];
         let (n, ps, rt): (&'static str, Vec<Ty>, Ty) = match name {
             n if f1.contains(&n) => (leak(format!("math.{}", n)), vec![Ty::Float], Ty::Float),
             "log" => {

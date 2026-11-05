@@ -4497,6 +4497,10 @@ impl<'a> FGen<'a> {
                 let b = self.borrow(&a[0])?;
                 v(format!("pyrt::repr({})", b))
             }
+            "format" => {
+                let (x, spec) = (self.borrow(&a[0])?, self.borrow_str(&a[1])?);
+                v(format!("pyrt::fmt({}, {})", x, spec))
+            }
             "int" => match &a[0].ty {
                 Ty::Str => {
                     let s = self.borrow_str(&a[0])?;
@@ -4672,6 +4676,7 @@ impl<'a> FGen<'a> {
             "e" => r("std::f64::consts::E", Kind::Val, ATOM),
             "tau" => r("std::f64::consts::TAU", Kind::Val, ATOM),
             "inf" => r("f64::INFINITY", Kind::Val, ATOM),
+            "nan" => r("f64::NAN", Kind::Val, ATOM),
             "sin" | "cos" | "tan" | "atan" | "tanh" => v(m(&vs, n)),
             "fabs" => v(m(&vs, "abs")),
             "isnan" => v(m(&vs, "is_nan")),

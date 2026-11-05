@@ -35,6 +35,8 @@ pub mod ir;
 #[cfg(feature = "translator")]
 pub mod modules;
 #[cfg(feature = "translator")]
+pub mod pkgsrc;
+#[cfg(feature = "translator")]
 pub mod own;
 #[cfg(feature = "translator")]
 pub mod project;

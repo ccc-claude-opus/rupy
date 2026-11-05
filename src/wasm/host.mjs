@@ -365,7 +365,7 @@ const MATH = {
     return Math.log10(x);
   },
   log1p: (x) => {
-    if (x <= -1) throw domain();
+    if (x <= -1) throw err("ValueError", "expected argument value > -1, got " + floatRepr(x));
     return Math.log1p(x);
   },
   log_base: (x, b) => {

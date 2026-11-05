@@ -61,6 +61,19 @@ pub fn exp(x: f64) -> f64 {
     finite(x.exp(), x)
 }
 
+/// `math.log1p(x)`: log(1 + x), accurate for small x.
+pub fn log1p(x: f64) -> f64 {
+    if x <= -1.0 {
+        raise("ValueError", &format!("expected argument value > -1, got {}", crate::pyrt::float_repr(x)));
+    }
+    x.ln_1p()
+}
+
+/// `math.expm1(x)`: exp(x) - 1, accurate for small x.
+pub fn expm1(x: f64) -> f64 {
+    finite(x.exp_m1(), x)
+}
+
 pub fn asin(x: f64) -> f64 {
     if !(-1.0..=1.0).contains(&x) {
         domain();

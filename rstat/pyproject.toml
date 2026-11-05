@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rstat"
+version = "0.1.0"
+description = "R's probability and statistics functions in pure Python: d/p/q/r distributions, t.test and friends, summary, quantile, with R's numbers and R's printed output"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = []
+keywords = ["statistics", "probability", "R", "distributions", "hypothesis-testing"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+
+[project.urls]
+Homepage = "https://github.com/ccc-claude-opus/rupy/tree/main/rstat"
+
+[tool.setuptools]
+packages = ["rstat"]

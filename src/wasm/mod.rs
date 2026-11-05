@@ -39,8 +39,15 @@ fn unsupported<T>(what: impl std::fmt::Display) -> Res<T> {
 /// Compile rupy source to a wasm module (`Err`: the translator's message, or
 /// what the wasm backend does not support).
 pub fn compile_source(src: &str) -> Result<Vec<u8>, String> {
-    let prog = crate::front::lower(src).map_err(|e| format!("line {}: {}", e.line, e.msg))?;
-    crate::own::analyze(&prog).map_err(|e| format!("line {}: {}", e.line, e.msg))?;
+    // packages written in rupy (`import rstat`) are appended to the program
+    let path = std::path::Path::new("main.py");
+    let c = crate::modules::combine_text(path, src.to_string()).map_err(|(f, _, e)| format!("{}: line {}: {}", f.display(), e.line, e.msg))?;
+    let at = |line: u32| {
+        let (f, _, l) = c.locate(line);
+        if f == path { format!("line {}", l) } else { format!("{} line {}", f.display(), l) }
+    };
+    let prog = crate::front::lower_modules(&c.src, &crate::front::default_stub_dirs(), &c.modules).map_err(|e| format!("{}: {}", at(e.line), e.msg))?;
+    crate::own::analyze(&prog).map_err(|e| format!("{}: {}", at(e.line), e.msg))?;
     compile(&prog)
 }
 
