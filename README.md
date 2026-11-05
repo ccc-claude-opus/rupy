@@ -144,7 +144,7 @@ name are overloads, `@rust("...")` gives a Rust path or an expression template, 
 - **rstat**: R's probability and statistics functions (`d`/`p`/`q` of 17 distributions,
   `set_seed` with R's random numbers, `t_test` and the other common tests, `summary`,
   `quantile`, ...), printed as R prints them. Unlike the packages above it is written in
-  rupy itself (`rstat/`, also on PyPI as pure Python): rupy compiles its source with the
+  rupy itself (`rstat/`, also on PyPI as pure Python: `pip install rupy-rstat`): rupy compiles its source with the
   program, so it runs on the Rust and the wasm backends alike. See
   [rstat/README.md](rstat/README.md).
 

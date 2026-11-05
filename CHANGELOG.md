@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **rstat**, R's probability and statistics functions, in `rstat/` (on PyPI as pure Python,
+- **rstat**, R's probability and statistics functions, in `rstat/` (on PyPI as `rupy-rstat`, pure Python,
   no dependencies): `d`/`p`/`q` of 17 distributions, R's random numbers after `set_seed`
   (Mersenne-Twister, inversion, `sample`), `t_test`, `var_test`, `chisq_test`, `binom_test`,
   `prop_test`, `cor_test`, `summary`, `quantile` (types 1–9), `cor`, `mad`, `fivenum`, ...,
