@@ -1,6 +1,6 @@
 # rupy 的簡易版 sympy 規劃
 
-狀態：規劃中，尚未實作（2026-11-06）。已決定採用做法 A：Rust 實作，模式同 numpy。
+狀態：延後（2026-11-06）。依 [stdlib-plan.md](stdlib-plan.md) 的方針，外部套件暫時用 Python 橋接，不做原生實作。若日後要做，採用做法 A：Rust 實作，模式同 numpy。
 
 目標：rupy 程式 `import sympy` 後，在 Rust、wasm、瀏覽器上都能執行，輸出和真的 sympy 一字不差。CPython 下直接執行真的 sympy，作為對照組。
 
