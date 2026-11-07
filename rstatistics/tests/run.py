@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-NAMES = ["dist", "format", "rng", "rng2", "htest", "table", "lm", "graphics"]
+NAMES = ["dist", "format", "rng", "rng2", "htest", "table", "lm", "graphics", "plots"]
 
 
 # the relative tolerance of the tests whose numbers are not exactly R's

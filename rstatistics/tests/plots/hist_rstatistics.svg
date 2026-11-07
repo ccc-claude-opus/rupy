@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="504.000pt" height="504.000pt" viewBox="0 0 504.000 504.000">
+<rect x="0" y="0" width="504.000" height="504.000" fill="white"/>
+<text x="266.400" y="51.840" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">Histogram of x</text>
+<text x="266.400" y="473.760" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">x</text>
+<text x="15.840" y="244.800" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle" transform="rotate(-90 15.840 244.800)">Frequency</text>
+<path d="M 59.040 430.560 M 74.400 430.560 L 74.400 437.760 M 151.200 430.560 L 151.200 437.760 M 228.000 430.560 L 228.000 437.760 M 304.800 430.560 L 304.800 437.760 M 381.600 430.560 L 381.600 437.760 M 458.400 430.560 L 458.400 437.760" fill="none" stroke="black" stroke-width="0.75"/>
+<text x="74.400" y="447.360" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">0</text>
+<text x="151.200" y="447.360" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">2</text>
+<text x="228.000" y="447.360" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">4</text>
+<text x="304.800" y="447.360" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">6</text>
+<text x="381.600" y="447.360" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">8</text>
+<text x="458.400" y="447.360" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">10</text>
+<path d="M 59.040 59.040 M 59.040 416.800 L 66.240 416.800 M 59.040 330.800 L 66.240 330.800 M 59.040 244.800 L 66.240 244.800 M 59.040 158.800 L 66.240 158.800 M 59.040 72.800 L 66.240 72.800" fill="none" stroke="black" stroke-width="0.75"/>
+<text x="44.640" y="421.000" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="end">0</text>
+<text x="44.640" y="335.000" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="end">1</text>
+<text x="44.640" y="249.000" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="end">2</text>
+<text x="44.640" y="163.000" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="end">3</text>
+<text x="44.640" y="77.000" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="end">4</text>
+<rect x="74.400" y="244.800" width="76.800" height="172.000" fill="none" stroke="lightgray" stroke-width="0.750"/>
+<rect x="151.200" y="72.800" width="76.800" height="344.000" fill="none" stroke="lightgray" stroke-width="0.750"/>
+<rect x="228.000" y="158.800" width="76.800" height="258.000" fill="none" stroke="lightgray" stroke-width="0.750"/>
+<rect x="304.800" y="244.800" width="76.800" height="172.000" fill="none" stroke="lightgray" stroke-width="0.750"/>
+<rect x="381.600" y="330.800" width="76.800" height="86.000" fill="none" stroke="lightgray" stroke-width="0.750"/>
+</svg>

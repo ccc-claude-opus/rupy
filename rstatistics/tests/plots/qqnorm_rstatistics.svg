@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="504.000pt" height="504.000pt" viewBox="0 0 504.000 504.000">
+<rect x="0" y="0" width="504.000" height="504.000" fill="white"/>
+<text x="266.400" y="51.840" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">Normal Q-Q Plot</text>
+<text x="266.400" y="473.760" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">Theoretical Quantiles</text>
+<text x="15.840" y="244.800" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle" transform="rotate(-90 15.840 244.800)">Sample Quantiles</text>
+<path d="M 59.040 430.560 M 64.798 430.560 L 64.798 437.760 M 136.362 430.560 L 136.362 437.760 M 207.926 430.560 L 207.926 437.760 M 279.490 430.560 L 279.490 437.760 M 351.054 430.560 L 351.054 437.760 M 422.618 430.560 L 422.618 437.760" fill="none" stroke="black" stroke-width="0.75"/>
+<text x="64.798" y="447.360" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">-2</text>
+<text x="136.362" y="447.360" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">0</text>
+<text x="207.926" y="447.360" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">2</text>
+<text x="279.490" y="447.360" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">4</text>
+<text x="351.054" y="447.360" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">6</text>
+<text x="422.618" y="447.360" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">8</text>
+<path d="M 59.040 59.040 M 59.040 425.401 L 66.240 425.401 M 59.040 361.292 L 66.240 361.292 M 59.040 297.183 L 66.240 297.183 M 59.040 233.073 L 66.240 233.073 M 59.040 168.964 L 66.240 168.964 M 59.040 104.855 L 66.240 104.855" fill="none" stroke="black" stroke-width="0.75"/>
+<text x="44.640" y="429.601" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="end">-2</text>
+<text x="44.640" y="365.492" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="end">0</text>
+<text x="44.640" y="301.383" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="end">2</text>
+<text x="44.640" y="237.273" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="end">4</text>
+<text x="44.640" y="173.164" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="end">6</text>
+<text x="44.640" y="109.055" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="end">8</text>
+<path d="M 59.040 430.560 L 473.760 430.560 L 473.760 59.040 L 59.040 59.040 Z" fill="none" stroke="black" stroke-width="0.750"/>
+<circle cx="74.400" cy="329.237" r="2.700" fill="none" stroke="black" stroke-width="0.750"/>
+<circle cx="95.201" cy="297.183" r="2.700" fill="none" stroke="black" stroke-width="0.750"/>
+<circle cx="107.300" cy="281.155" r="2.700" fill="none" stroke="black" stroke-width="0.750"/>
+<circle cx="116.735" cy="265.128" r="2.700" fill="none" stroke="black" stroke-width="0.750"/>
+<circle cx="124.961" cy="249.101" r="2.700" fill="none" stroke="black" stroke-width="0.750"/>
+<circle cx="132.618" cy="233.073" r="2.700" fill="none" stroke="black" stroke-width="0.750"/>
+<circle cx="140.106" cy="217.046" r="2.700" fill="none" stroke="black" stroke-width="0.750"/>
+<circle cx="147.764" cy="201.019" r="2.700" fill="none" stroke="black" stroke-width="0.750"/>
+<circle cx="155.990" cy="168.964" r="2.700" fill="none" stroke="black" stroke-width="0.750"/>
+<circle cx="165.425" cy="136.909" r="2.700" fill="none" stroke="black" stroke-width="0.750"/>
+<circle cx="177.524" cy="104.855" r="2.700" fill="none" stroke="black" stroke-width="0.750"/>
+<circle cx="198.325" cy="72.800" r="2.700" fill="none" stroke="black" stroke-width="0.750"/>
+</svg>

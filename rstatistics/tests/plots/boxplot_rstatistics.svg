@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="504.000pt" height="504.000pt" viewBox="0 0 504.000 504.000">
+<rect x="0" y="0" width="504.000" height="504.000" fill="white"/>
+<text x="266.400" y="51.840" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">Box plot of x</text>
+<text x="266.400" y="473.760" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">x</text>
+<path d="M 59.040 430.560 M 122.400 430.560 L 122.400 437.760 M 218.400 430.560 L 218.400 437.760 M 314.400 430.560 L 314.400 437.760 M 410.400 430.560 L 410.400 437.760" fill="none" stroke="black" stroke-width="0.75"/>
+<text x="122.400" y="447.360" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">2</text>
+<text x="218.400" y="447.360" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">4</text>
+<text x="314.400" y="447.360" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">6</text>
+<text x="410.400" y="447.360" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="middle">8</text>
+<path d="M 59.040 59.040 M 59.040 373.800 L 66.240 373.800 M 59.040 287.800 L 66.240 287.800 M 59.040 201.800 L 66.240 201.800 M 59.040 115.800 L 66.240 115.800" fill="none" stroke="black" stroke-width="0.75"/>
+<text x="44.640" y="378.000" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="end">2</text>
+<text x="44.640" y="292.000" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="end">4</text>
+<text x="44.640" y="206.000" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="end">6</text>
+<text x="44.640" y="120.000" font-family="sans-serif" font-size="12.000" fill="black" text-anchor="end">8</text>
+<path d="M 59.040 430.560 L 473.760 430.560 L 473.760 59.040 L 59.040 59.040 Z" fill="none" stroke="black" stroke-width="0.750"/>
+<path d="M 158.400 277.050 L 158.400 277.050M 338.400 277.050 L 338.400 277.050" fill="none" stroke="black" stroke-width="0.750"/>
+<path d="M 158.400 341.550 L 158.400 180.300M 338.400 341.550 L 338.400 180.300" fill="none" stroke="black" stroke-width="0.750"/>
+<rect x="158.400" y="180.300" width="180.000" height="161.250" fill="white" stroke="black" stroke-width="0.750"/>
+<path d="M 158.400 277.050 L 158.400 277.050M 338.400 277.050 L 338.400 277.050" fill="none" stroke="black" stroke-width="0.750"/>
+</svg>
