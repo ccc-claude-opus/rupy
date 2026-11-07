@@ -6,10 +6,10 @@ is written in rupy's typed subset of Python, so rupy compiles it to Rust or
 WebAssembly as well."""
 
 from rstatistics.distributions import (
-    dbeta, dbinom, dcauchy, dchisq, dexp, df, dgamma, dgeom, dhyper, dlnorm, dlogis, dnbinom, dnorm, dpois, dt,
+    dbeta, dbinom, dcauchy, dchisq, dexp, df, dgamma, dgeom, dhyper, dlnorm, dlogis, dnbinom, dnbinom_mu, dnorm, dpois, dt,
     dunif, dweibull, pbeta, pbinom, pcauchy, pchisq, pexp, pf, pgamma, pgeom, phyper, plnorm, plogis, pnbinom,
-    pnorm, ppois, pt, punif, pweibull, qbeta, qbinom, qcauchy, qchisq, qexp, qf, qgamma, qgeom, qlnorm, qlogis,
-    qnorm, qpois, qt, qunif, qweibull,
+    pnorm, ppois, pt, punif, pweibull, qbeta, qbinom, qcauchy, qchisq, qexp, qf, qgamma, qgeom, qhyper, qlnorm, qlogis,
+    qnorm, qnbinom, qpois, qt, qunif, qweibull,
 )
 from rstatistics.describe import IQR, Named, Summary, cor, cov, fivenum, mad, mean, median, quantile, rank, scale, sd, summary, var, weighted_mean
 from rstatistics.htest import HTest, binom_test, chisq_test, chisq_test_table, cor_test, prop_test, t_test, var_test

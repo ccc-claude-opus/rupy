@@ -326,3 +326,123 @@ def pbeta_raw(x: float, a: float, b: float, lower: bool) -> float:
         return p if lower else 1.0 - p
     q = front * _betacf(1.0 - x, b, a) / b
     return 1.0 - q if lower else q
+
+
+# ------------------------------------------------- binomial coefficients, raw
+
+
+def stirlerr(n: float) -> float:
+    """log(n!) - log(sqrt(2*pi*n) * (n/e)^n), as R's stirlerr."""
+    sferr_halves: list[float] = [0.0, 0.1534264097200273452913848, 0.0810614667953272582196702, 0.0548141210519176538961390, 0.0413406959554092940938221, 0.03316287351993628748511048, 0.02767792568499833914878929, 0.02374616365629749597132920, 0.02079067210376509311152277, 0.01848845053267318523077934, 0.01664469118982119216319487, 0.01513497322191737887351255, 0.01387612882307074799874573, 0.01281046524292022692424986, 0.01189670994589177009505572, 0.01110455975820691732662991, 0.010411265261972096497478567, 0.009799416126158803298389475, 0.009255462182712732917728637, 0.008768700134139385462952823, 0.008330563433362871256469318, 0.007934114564314020547248100, 0.007573675487951840794972024, 0.007244554301320383179543912, 0.006942840107209529865664152, 0.006665247032707682442354394, 0.006408994188004207068439631, 0.006171712263039457647532867, 0.005951370112758847735624416, 0.005746216513010115682023589, 0.005554733551962801371038690]
+    s0 = 0.083333333333333333333
+    s1 = 0.00277777777777777777778
+    s2 = 0.00079365079365079365079365
+    s3 = 0.000595238095238095238095238
+    s4 = 0.0008417508417508417508417508
+    s5 = 0.0019175269175269175269175262
+    s6 = 0.0064102564102564102564102561
+    s7 = 0.029550653594771241830065352
+    s8 = 0.17964437236883057316493850
+    s9 = 1.3924322169059011164274315
+    s10 = 13.402864044168391994478957
+    s11 = 156.84828462600201730636509
+    s12 = 2193.1033333333333333333333
+    s13 = 36108.771253724989357173269
+    s14 = 691472.26885131306710839498
+    s15 = 15238221.539407416192283370
+    s16 = 382900751.39141414141414141
+    if n <= 23.5:
+        nn = n + n
+        if n <= 15.0 and nn == float(int(nn)):
+            return sferr_halves[int(nn)]
+        if n <= 5.25:
+            if n >= 1.0:
+                l_n = math.log(n)
+                return lgamma(n) + n * (1.0 - l_n) + 0.5 * (l_n - 1.837877066409345483560659472811)
+            return lgamma(n + 1.0) - (n + 0.5) * math.log(n) + n - 0.9189385332046727418
+        nn = n * n
+        if n > 12.8:
+            return (s0 - (s1 - (s2 - (s3 - (s4 - (s5 - s6 / nn) / nn) / nn) / nn) / nn) / nn) / n
+        if n > 12.3:
+            return (s0 - (s1 - (s2 - (s3 - (s4 - (s5 - (s6 - s7 / nn) / nn) / nn) / nn) / nn) / nn) / nn) / n
+        if n > 8.9:
+            return (s0 - (s1 - (s2 - (s3 - (s4 - (s5 - (s6 - (s7 - s8 / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / n
+        if n > 7.3:
+            return (s0 - (s1 - (s2 - (s3 - (s4 - (s5 - (s6 - (s7 - (s8 - (s9 - s10 / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / n
+        if n > 6.6:
+            return (s0 - (s1 - (s2 - (s3 - (s4 - (s5 - (s6 - (s7 - (s8 - (s9 - (s10 - (s11 - s12 / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / n
+        if n > 6.1:
+            return (s0 - (s1 - (s2 - (s3 - (s4 - (s5 - (s6 - (s7 - (s8 - (s9 - (s10 - (s11 - (s12 - (s13 - s14 / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / n
+        return (s0 - (s1 - (s2 - (s3 - (s4 - (s5 - (s6 - (s7 - (s8 - (s9 - (s10 - (s11 - (s12 - (s13 - (s14 - (s15 - s16 / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / nn) / n
+    nn = n * n
+    if n > 15.7e6:
+        return s0 / n
+    if n > 6180.0:
+        return (s0 - s1 / nn) / n
+    if n > 205.0:
+        return (s0 - (s1 - s2 / nn) / nn) / n
+    if n > 86.0:
+        return (s0 - (s1 - (s2 - s3 / nn) / nn) / nn) / n
+    if n > 27.0:
+        return (s0 - (s1 - (s2 - (s3 - s4 / nn) / nn) / nn) / nn) / n
+    return (s0 - (s1 - (s2 - (s3 - (s4 - s5 / nn) / nn) / nn) / nn) / nn) / n
+
+
+def bd0(x: float, np_: float) -> float:
+    """x log(x/np) + np - x, computed stably, as R's bd0."""
+    if not (math.isfinite(x) and math.isfinite(np_)) or np_ == 0.0:
+        return math.nan
+    if abs(x - np_) < 0.1 * (x + np_):
+        d = x - np_
+        v = d / (x + np_)
+        if d != 0.0 and v == 0.0:
+            x_ = 0.25 * x
+            n_ = 0.25 * np_
+            v = (x_ - n_) / (x_ + n_)
+        s = 0.5 * d * v
+        if abs(2.0 * s) < 2.2250738585072014e-308:
+            return 2.0 * s
+        ej = x * v
+        v *= v
+        j = 1
+        while j < 1000:
+            ej *= v
+            s_ = s
+            s += ej / float(2 * j + 1)
+            if s == s_:
+                return 2.0 * s
+            j += 1
+    if x > np_:
+        if math.isfinite(x / np_):
+            lg = math.log(x / np_)
+        else:
+            lg = math.log(x) - math.log(np_)
+        return x * (lg - 1.0) + np_
+    if math.isfinite(x / np_):
+        lg = math.log(x / np_)
+    else:
+        lg = math.log(x) - math.log(np_)
+    return x * lg + np_ - x
+
+
+def dbinom_raw(x: float, n: float, p: float, q: float, give_log: bool) -> float:
+    """R's dbinom_raw: the binomial (log) mass without argument checks."""
+    if p == 0.0:
+        return 0.0 if give_log else (1.0 if x == 0.0 else 0.0)
+    if q == 0.0:
+        return 0.0 if give_log else (1.0 if x == n else 0.0)
+    if x == 0.0:
+        if n == 0.0:
+            return 0.0 if give_log else 1.0
+        if p > q:
+            return n * math.log(q) if give_log else q ** n
+        return n * math.log1p(-p) if give_log else (1.0 - p) ** n
+    if x == n:
+        if p > q:
+            return n * math.log1p(-q) if give_log else (1.0 - q) ** n
+        return n * math.log(p) if give_log else p ** n
+    if x < 0.0 or x > n:
+        return -math.inf if give_log else 0.0
+    lc = stirlerr(n) - stirlerr(x) - stirlerr(n - x) - bd0(x, n * p) - bd0(n - x, n * q)
+    lf = 1.837877066409345483560659472811 + math.log(x) + math.log1p(-x / n)
+    return lc - 0.5 * lf if give_log else math.exp(lc - 0.5 * lf)

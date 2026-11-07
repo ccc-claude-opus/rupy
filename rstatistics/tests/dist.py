@@ -1,3 +1,5 @@
+import math
+
 import rstatistics as r
 
 print(f"{r.pnorm(1.96):.17g}")
@@ -85,3 +87,19 @@ print(f"{r.gamma(0.2):.17g}")
 print(f"{r.beta(2.5, 3.5):.17g}")
 print(f"{r.choose(10.0, 3.0):.17g}")
 print(f"{r.choose(50.0, 25.0):.17g}")
+print(f"{r.qnbinom(0.3, 5.0, 0.4):.17g}")
+print(f"{r.qnbinom(0.975, 2.5, 0.1):.17g}")
+print(f"{r.qnbinom(0.5, 30.0, 0.7):.17g}")
+print(f"{r.qnbinom(1e-9, 1e5, 1/30):.17g}")
+print(f"{r.qnbinom(0.4, 7.0, 0.3, lower_tail=False):.17g}")
+print(f"{r.qnbinom(math.log(0.8), 12.0, 0.25, log_p=True):.17g}")
+print(f"{r.qhyper(0.5, 10.0, 20.0, 5.0):.17g}")
+print(f"{r.qhyper(0.9, 300.0, 700.0, 200.0):.17g}")
+print(f"{r.qhyper(0.01, 5.0, 5.0, 3.0):.17g}")
+print(f"{r.qhyper(0.3, 50.0, 30.0, 40.0, lower_tail=False):.17g}")
+print(f"{r.dnbinom_mu(3.0, 5.0, 2.5):.17g}")
+print(f"{r.dnbinom_mu(0.0, 2.5, 100.0):.17g}")
+print(f"{r.dnbinom_mu(10.0, 30.0, 0.5):.17g}")
+print(f"{r.dnbinom_mu(100.0, 1e5, 3.0):.17g}")
+print(f"{r.dnbinom_mu(3.0, 5.0, 2.5, log=True):.17g}")
+print(f"{r.dnbinom_mu(100.0, 1e5, 3.0, log=True):.17g}")

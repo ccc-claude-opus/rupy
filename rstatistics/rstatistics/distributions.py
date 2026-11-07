@@ -5,7 +5,7 @@ rstatistics.RNG. Arguments are R's (`lower.tail` is `lower_tail`, `log.p` is
 
 import math
 
-from rstatistics.special import EPS, LN_SQRT_2PI, dnorm0, lbeta, lchoose, lgamma, pbeta_raw, pgamma_raw, pnorm0, qnorm0
+from rstatistics.special import EPS, LN_SQRT_2PI, dbinom_raw, dnorm0, lbeta, lchoose, lgamma, pbeta_raw, pgamma_raw, pnorm0, qnorm0
 
 
 def _out(p: float, lower_tail: bool, log_p: bool) -> float:
@@ -454,11 +454,27 @@ def qgeom(p: float, prob: float, lower_tail: bool = True, log_p: bool = False) -
 
 
 def dnbinom(x: float, size: float, prob: float, log: bool = False) -> float:
+    """The negative binomial mass (R's dnbinom with `prob`)."""
+    if prob <= 0.0 or prob > 1.0 or size < 0.0:
+        return math.nan
     if x < 0.0 or not _int(x):
         return _dens(0.0, log)
     x = float(round(x))
-    ld = lgamma(x + size) - lgamma(size) - lgamma(x + 1.0) + size * math.log(prob) + x * math.log1p(-prob)
-    return ld if log else math.exp(ld)
+    if x == 0.0:
+        if size == 0.0:
+            return _dens(1.0, log)
+        return size * math.log(prob) if log else prob ** size
+    if size == math.inf:
+        size = 1.7976931348623157e308
+    if x < 1e-10 * size:
+        xx2s = x * (x - 1.0) / (2.0 * size)
+        ld = size * math.log(prob) + x * (math.log(size) + math.log1p(-prob)) - lgamma(x + 1.0) + math.log1p(xx2s)
+        return ld if log else math.exp(ld)
+    if log:
+        lp = math.log1p(-x / (size + x)) if x < size else math.log(size / (size + x))
+        return lp + dbinom_raw(size, x + size, prob, 1.0 - prob, True)
+    ans = dbinom_raw(size, x + size, prob, 1.0 - prob, False)
+    return size / (size + x) * ans
 
 
 def pnbinom(q: float, size: float, prob: float, lower_tail: bool = True, log_p: bool = False) -> float:
@@ -487,3 +503,165 @@ def phyper(q: float, m: float, n: float, k: float, lower_tail: bool = True, log_
     if s > 1.0:
         s = 1.0
     return _out(s, lower_tail, log_p)
+
+
+def dnbinom_mu(x: float, size: float, mu: float, log: bool = False) -> float:
+    """R's dnbinom(x, size, mu): the negative binomial mass via the mean."""
+    if mu < 0.0 or size < 0.0:
+        return math.nan
+    if x < 0.0 or not _int(x):
+        return _dens(0.0, log)
+    if x == 0.0 and size == 0.0:
+        return _dens(1.0, log)
+    x = float(round(x))
+    if size == math.inf:
+        return dpois(x, mu, log)
+    if x == 0.0:
+        ld = size * (math.log(size / (size + mu)) if size < mu else math.log1p(-mu / (size + mu)))
+        return ld if log else math.exp(ld)
+    if x < 1e-10 * size:
+        p_ = math.log(size / (1.0 + size / mu)) if size < mu else math.log(mu / (1.0 + mu / size))
+        xx2s = x * (x - 1.0) / (2.0 * size)
+        ld = x * p_ - mu - lgamma(x + 1.0) + math.log1p(xx2s)
+        return ld if log else math.exp(ld)
+    if x < size:
+        lp = math.log1p(-x / (size + x))
+    else:
+        lp = math.log(size / (size + x))
+    ans = dbinom_raw(size, x + size, size / (size + mu), mu / (size + mu), True)
+    ld = lp + ans
+    return ld if log else math.exp(ld)
+
+
+def _discrete_search(y: float, z: float, p: float, size: float, prob: float, lower_tail: bool, log_p: bool, incr: float) -> float:
+    """R's do_search() of qDiscrete_search.h: walk from y to the p-quantile."""
+    left = z >= p if lower_tail else z < p
+    if left:
+        while True:
+            newz = -1.0
+            if y > 0.0:
+                newz = pnbinom(y - incr, size, prob, lower_tail, log_p)
+            elif y < 0.0:
+                y = 0.0
+            if y == 0.0 or math.isnan(newz) or (newz < p if lower_tail else newz >= p):
+                return y
+            y = max(0.0, y - incr)
+    while True:
+        prevy = y
+        y += incr
+        newz = pnbinom(y, size, prob, lower_tail, log_p)
+        if math.isnan(newz) or (newz >= p if lower_tail else newz < p):
+            if incr <= 1.0:
+                return y
+            return prevy
+
+
+def qnbinom(p: float, size: float, prob: float, lower_tail: bool = True, log_p: bool = False) -> float:
+    """R's qnbinom: a Cornish-Fisher start, then R's discrete search."""
+    if prob <= 0.0 or prob > 1.0 or size < 0.0:
+        return math.nan
+    if (prob == 0.0 and size == 0.0) or prob == 1.0 or size == 0.0:
+        return 0.0
+    if log_p:
+        if p > 0.0:
+            return math.nan
+        if p == 0.0:
+            return math.inf if lower_tail else 0.0
+        if p == -math.inf:
+            return 0.0 if lower_tail else math.inf
+    else:
+        if p < 0.0 or p > 1.0:
+            return math.nan
+        if p == 0.0:
+            return 0.0 if lower_tail else math.inf
+        if p == 1.0:
+            return math.inf if lower_tail else 0.0
+    q = 1.0 / prob
+    pp = (1.0 - prob) * q
+    mu = size * pp
+    sigma = math.sqrt(size * pp * q)
+    gam = (q + pp) / sigma
+    z = qnorm0(p, lower_tail, log_p)
+    y0 = math.fma(sigma, gam * math.fma(z, z, -1.0) / 6.0, mu)
+    y = float(round(y0))
+    if y == 0.0 and y0 < 0.0:
+        y = -0.0
+    if y < 0.0:
+        y = 0.0
+    z = pnbinom(y, size, prob, lower_tail, log_p)
+    # the left-continuity fuzz of qDiscrete_search.h
+    if log_p:
+        e = 2.0 * EPS
+        if lower_tail and p > -1.7976931348623157e308:
+            p *= 1.0 + e
+        else:
+            p *= 1.0 - e
+    else:
+        e = 8.0 * EPS
+        if lower_tail:
+            p *= 1.0 - e
+        elif 1.0 - p > 4.0 * e:
+            p *= 1.0 + e
+
+    if y < 4096.0:
+        return _discrete_search(y, z, p, size, prob, lower_tail, log_p, 1.0)
+    incr = float(math.floor(y * (1.0 / 64.0)))
+    while True:
+        oldincr = incr
+        y = _discrete_search(y, z, p, size, prob, lower_tail, log_p, incr)
+        incr = max(1.0, float(math.floor(incr / 8.0)))
+        if not (oldincr > 1.0 and incr > y * 1e-15):
+            return y
+
+
+def qhyper(p: float, m: float, n: float, k: float, lower_tail: bool = True, log_p: bool = False) -> float:
+    """R's qhyper: accumulate the mass from the left."""
+    if not (math.isfinite(p) and math.isfinite(m) and math.isfinite(n) and math.isfinite(k)):
+        return math.nan
+    nr = float(round(m))
+    nb = float(round(n))
+    big_n = nr + nb
+    nn = float(round(k))
+    if nr < 0.0 or nb < 0.0 or nn < 0.0 or nn > big_n:
+        return math.nan
+    xstart = max(0.0, nn - nb)
+    xend = min(nn, nr)
+    if log_p:
+        if p > 0.0:
+            return math.nan
+        if p == 0.0:
+            return xend if lower_tail else xstart
+        if p == -math.inf:
+            return xstart if lower_tail else xend
+    else:
+        if p < 0.0 or p > 1.0:
+            return math.nan
+        if p == 0.0:
+            return xstart if lower_tail else xend
+        if p == 1.0:
+            return xend if lower_tail else xstart
+    xr = xstart
+    xb = nn - xr
+    small_n = big_n < 1000.0
+    term = lchoose(nr, xr) + lchoose(nb, xb) - lchoose(big_n, nn)
+    if small_n:
+        term = math.exp(term)
+    nr -= xr
+    nb -= xb
+    if log_p:
+        p = math.exp(p) if lower_tail else -math.expm1(p)
+    elif not lower_tail:
+        p = 0.5 - p + 0.5
+    p *= 1.0 - 1000.0 * EPS
+    sum = term if small_n else math.exp(term)
+    while sum < p and xr < xend:
+        xr += 1.0
+        nb += 1.0
+        if small_n:
+            term *= (nr / xr) * (xb / nb)
+        else:
+            term += math.log((nr / xr) * (xb / nb))
+        sum += term if small_n else math.exp(term)
+        xb -= 1.0
+        nr -= 1.0
+    return xr
