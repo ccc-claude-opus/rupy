@@ -161,48 +161,66 @@ def pnorm0(x: float, lower: bool, log_p: bool) -> float:
 
 
 def qnorm0(p: float, lower: bool, log_p: bool) -> float:
-    """The standard normal quantile: an approximation (Abramowitz and Stegun
-    26.2.23), refined by Halley's method on pnorm0."""
+    """The standard normal quantile: R's qnorm, Wichura's algorithm AS 241
+    with its improved asymptotic tail formulas."""
+    # p' = the probability p refers to (R's R_DT_qIv)
     if log_p:
-        p = math.exp(p)
-    if math.isnan(p) or p < 0.0 or p > 1.0:
-        return math.nan
-    if p == 0.0:
-        return -math.inf if lower else math.inf
-    if p == 1.0:
-        return math.inf if lower else -math.inf
-    return _qnorm_lower(p, lower)
-
-
-def _qnorm_lower(p: float, lower: bool) -> float:
-    """x with Φ(x) = p (lower) or 1 - Φ(x) = p."""
-    if 0.075 <= p <= 0.925:
-        # central: solve Φ(x) - 1/2 = δ, whose series keeps δ's relative precision
-        delta = p - 0.5 if lower else 0.5 - p
-        x = delta * SQRT_2PI
-        for _ in range(8):
-            e = (_norm_central(x) - delta) / dnorm0(x)
-            step = e / (1.0 + 0.5 * x * e)
-            x -= step
-            if abs(step) <= 1e-17 * max(abs(x), 1e-300):
-                break
-        return x
-    tail = p if p <= 0.5 else 1.0 - p
-    t = math.sqrt(-2.0 * math.log(tail))
-    x = t - (2.515517 + 0.802853 * t + 0.010328 * t * t) / (1.0 + 1.432788 * t + 0.189269 * t * t + 0.001308 * t * t * t)
-    # x > 0 is the quantile of the upper tail `tail`
-    if (p <= 0.5) == lower:
-        x = -x
-    for _ in range(6):
-        if lower:
-            e = (pnorm0(x, True, False) - p) / dnorm0(x)
+        p_ = math.exp(p) if lower else -math.expm1(p)
+    else:
+        p_ = p if lower else 0.5 - p + 0.5
+    q = p_ - 0.5
+    if abs(q) <= 0.425:
+        r = math.fma(-q, q, 0.180625)
+        num = math.fma(r, 2509.0809287301226727, 33430.575583588128105)
+        for co in [67265.770927008700853, 45921.953931549871457, 13731.693765509461125, 1971.5909503065514427, 133.14166789178437745, 3.387132872796366608]:
+            num = math.fma(num, r, co)
+        den = math.fma(r, 5226.495278852854561, 28729.085735721942674)
+        for co in [39307.89580009271061, 21213.794301586595867, 5394.1960214247511077, 687.1870074920579083, 42.313330701600911252, 1.0]:
+            den = math.fma(den, r, co)
+        val = q * num / den
+        return val
+    # closer than 0.075 from {0, 1}: lp = log(min(p, 1 - p))
+    if log_p and ((lower and q <= 0.0) or (not lower and q > 0.0)):
+        lp = p
+    else:
+        lp = math.log(-math.expm1(p) if q > 0.0 else p_) if log_p else math.log(0.5 - p_ + 0.5 if q > 0.0 else p_)
+    r = math.sqrt(-lp)
+    if r <= 5.0:
+        r += -1.6
+        num = math.fma(r, 7.7454501427834140764e-4, 0.0227238449892691845833)
+        for co in [0.24178072517745061177, 1.27045825245236838258, 3.64784832476320460504, 5.7694972214606914055, 4.6303378461565452959, 1.42343711074968357734]:
+            num = math.fma(num, r, co)
+        den = math.fma(r, 1.05075007164441684324e-9, 5.475938084995344946e-4)
+        for co in [0.0151986665636164571966, 0.14810397642748007459, 0.68976733498510000455, 1.6763848301838038494, 2.05319162663775882187, 1.0]:
+            den = math.fma(den, r, co)
+        val = num / den
+    elif r <= 27.0:
+        r += -5.0
+        num = math.fma(r, 2.01033439929228813265e-7, 2.71155556874348757815e-5)
+        for co in [0.0012426609473880784386, 0.026532189526576123093, 0.29656057182850489123, 1.7848265399172913358, 5.4637849111641143699, 6.6579046435011037772]:
+            num = math.fma(num, r, co)
+        den = math.fma(r, 2.04426310338993978564e-15, 1.4215117583164458887e-7)
+        for co in [1.8463183175100546818e-5, 7.868691311456132591e-4, 0.0148753612908506148525, 0.13692988092273580531, 0.59983220655588793769, 1.0]:
+            den = math.fma(den, r, co)
+        val = num / den
+    else:
+        if r >= 6.4e8:
+            val = r * 1.414213562373095048801688724210
         else:
-            e = -(pnorm0(x, False, False) - p) / dnorm0(x)
-        step = e / (1.0 + 0.5 * x * e)
-        x -= step
-        if abs(step) <= 1e-15 * max(1.0, abs(x)):
-            break
-    return x
+            s2 = -lp * 2.0
+            x2 = s2 - math.log(6.283185307179586476925286766559 * s2)
+            if r < 36000.0:
+                x2 = s2 - math.log(6.283185307179586476925286766559 * x2) - 2.0 / (2.0 + x2)
+                if r < 840.0:
+                    x2 = s2 - math.log(6.283185307179586476925286766559 * x2) + 2.0 * math.log1p(-((1.0 - 1.0 / (4.0 + x2)) / (2.0 + x2)))
+                    if r < 109.0:
+                        x2 = s2 - math.log(6.283185307179586476925286766559 * x2) + 2.0 * math.log1p(-(1.0 - (1.0 - 5.0 / (6.0 + x2)) / (4.0 + x2)) / (2.0 + x2))
+                        if r < 55.0:
+                            x2 = s2 - math.log(6.283185307179586476925286766559 * x2) + 2.0 * math.log1p(-(1.0 - (1.0 - (5.0 - 9.0 / (8.0 + x2)) / (6.0 + x2)) / (4.0 + x2)) / (2.0 + x2))
+            val = math.sqrt(x2)
+    if q < 0.0:
+        val = -val
+    return val
 
 
 # ---------------------------------------------------------------- incomplete gamma

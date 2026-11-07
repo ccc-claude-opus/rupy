@@ -61,6 +61,11 @@ pub fn exp(x: f64) -> f64 {
     finite(x.exp(), x)
 }
 
+/// `math.fma(x, y, z)`: x * y + z with one rounding (a fused multiply-add).
+pub fn fma(x: f64, y: f64, z: f64) -> f64 {
+    x.mul_add(y, z)
+}
+
 /// `math.log1p(x)`: log(1 + x), accurate for small x.
 pub fn log1p(x: f64) -> f64 {
     if x <= -1.0 {

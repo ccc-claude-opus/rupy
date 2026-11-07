@@ -968,6 +968,21 @@ impl<'a> W<'a> {
             }
             "log2args" => self.math("log_base")?,
             "atan2" | "hypot" | "pow" => self.math(n)?,
+            // math_fn has already pushed the three f64 args; pop them but push
+            // in order (like rt::math) since host_args are registered in order
+            "fma" => {
+                let mut ls = vec![];
+                for _ in a {
+                    let l = self.fx.local(Val::F64);
+                    self.c().local_set(l);
+                    ls.push(l);
+                }
+                for l in ls.iter().rev() {
+                    self.c().local_get(*l);
+                    self.host_arg(&Ty::Float)?;
+                }
+                self.host_call("fma", &Ty::Float)?;
+            }
             _ if MATH_OPS.contains(&n) => {
                 // the host raises ValueError("math domain error") as Python
                 self.c().f64_const(0.0);

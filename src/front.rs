@@ -4648,6 +4648,7 @@ impl Front {
                 }
             }
             "atan2" | "hypot" | "pow" | "fmod" | "copysign" => (leak(format!("math.{}", name)), vec![Ty::Float, Ty::Float], Ty::Float),
+            "fma" => ("math.fma", vec![Ty::Float, Ty::Float, Ty::Float], Ty::Float),
             "radians" | "degrees" => (leak(format!("math.{}", name)), vec![Ty::Float], Ty::Float),
             "isclose" => ("math.isclose", vec![Ty::Float, Ty::Float], Ty::Bool),
             "floor" | "ceil" | "trunc" => (leak(format!("math.{}", name)), vec![Ty::Float], Ty::Int),

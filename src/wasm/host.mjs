@@ -375,6 +375,19 @@ const MATH = {
     return Math.log(x) / d;
   },
   hypot: (a, b) => Math.hypot(a, b),
+  // a * b + z with one rounding: error-free product (Dekker), two-sum with z
+  fma: (x, y, z) => {
+    const cl = 134217729;
+    const ax = x * cl, bx = y * cl;
+    const xh = ax - (ax - x), xl = x - xh;
+    const yh = bx - (bx - y), yl = y - yh;
+    const p = x * y;
+    const err = ((xh * yh - p) + xh * yl + xl * yh) + xl * yl;
+    const s = p + z;
+    const bv = s - p, av = s - bv;
+    const del = (p - av) + (z - bv);
+    return s + (del + err);
+  },
   cbrt: (x) => Math.cbrt(x),
   degrees: (x) => x * (180 / Math.PI),
   radians: (x) => x * (Math.PI / 180),
