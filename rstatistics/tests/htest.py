@@ -36,3 +36,7 @@ print(r.ks_test(x, y, data_name="x and y"))
 print(r.ks_test(x, y, exact=False, data_name="x and y"))
 print(r.ks_test(x, y, alternative="greater", data_name="x and y"))
 print(r.shapiro_test(x, data_name="x"))
+pv = [0.001, 0.008, 0.039, 0.041, 0.042, 0.06, 0.074, 0.205, 0.212, 0.216]
+for m in ["holm", "hommel", "BH", "BY", "bonferroni"]:
+    print(r.print_vector(r.p_adjust(pv, m)))
+print(r.print_vector(r.p_adjust([0.1, 0.1, 0.2, 0.3, 0.9], "hommel")))

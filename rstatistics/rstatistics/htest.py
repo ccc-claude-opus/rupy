@@ -1437,3 +1437,128 @@ def shapiro_test(x: list[float], data_name: str = "x") -> HTest:
     h.statistic = w
     h.p_value = p
     return h
+
+
+# ------------------------------------------------------------ adjusting p-values
+
+
+def p_adjust(p: list[float], method: str = "holm", n: int = 0) -> list[float]:
+    """Adjusted p-values (R's p.adjust).
+
+    The methods are R's: "holm", "hochberg", "hommel", "bonferroni", "BH"
+    (the same as "fdr"), "BY" and "none". `n` is the number of tests (by
+    default the number of p-values)."""
+    if method == "fdr":
+        method = "BH"
+    if method not in ("holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "none"):
+        raise ValueError("'method' must be one of \"holm\", \"hochberg\", \"hommel\", \"bonferroni\", \"BH\", \"BY\", \"fdr\", \"none\"")
+    # the missing values keep their place
+    vals: list[float] = []
+    where: list[int] = []
+    for i in range(len(p)):
+        if not math.isnan(p[i]):
+            vals.append(p[i])
+            where.append(i)
+    lp = len(vals)
+    if n <= 0:
+        n = lp
+    out = [math.nan] * len(p)
+    if n <= 1 or lp == 0:
+        for i in range(len(p)):
+            out[i] = p[i]
+        return out
+    if n == 2 and method == "hommel":
+        method = "hochberg"
+    if method == "bonferroni":
+        adj = [min(1.0, float(n) * v) for v in vals]
+    elif method == "none":
+        adj = list(vals)
+    elif method == "holm":
+        o = sorted(range(lp), key=lambda i: vals[i])
+        ro = sorted(range(lp), key=lambda i: o[i])
+        acc = 0.0
+        q: list[float] = []
+        for i in range(lp):
+            v = float(n + 1 - (i + 1)) * vals[o[i]]
+            if v > acc:
+                acc = v
+            q.append(min(1.0, acc))
+        adj = [0.0] * lp
+        for i in range(lp):
+            adj[ro[i]] = q[i]
+    elif method == "hochberg":
+        o = sorted(range(lp), key=lambda i: -vals[i])
+        ro = sorted(range(lp), key=lambda i: o[i])
+        acc = math.inf
+        q = [0.0] * lp
+        for i in range(lp):
+            v = float(n + 1 - (lp - i)) * vals[o[i]]
+            if v < acc:
+                acc = v
+            q[i] = min(1.0, acc)
+        adj = [0.0] * lp
+        for i in range(lp):
+            adj[ro[i]] = q[i]
+    elif method == "hommel":
+        if n > lp:
+            vals = vals + [1.0] * (n - lp)
+        nn = n
+        o = sorted(range(nn), key=lambda i: vals[i])
+        ro = sorted(range(nn), key=lambda i: o[i])
+        ps = [0.0] * nn
+        for i in range(nn):
+            ps[i] = vals[o[i]]
+        q = [0.0] * nn
+        pa = [0.0] * nn
+        m0 = math.inf
+        for i in range(nn):
+            v = float(nn) * ps[i] / float(i + 1)
+            if v < m0:
+                m0 = v
+        for i in range(nn):
+            q[i] = m0
+            pa[i] = m0
+        j = nn - 1
+        while j >= 2:
+            q1 = math.inf
+            for k in range(j - 1):
+                v = float(j) * ps[nn - j + 1 + k] / float(2 + k)
+                if v < q1:
+                    q1 = v
+            for k in range(nn - j + 1):
+                v = float(j) * ps[k]
+                if q1 < v:
+                    v = q1
+                q[k] = v
+            for k in range(nn - j + 1, nn):
+                q[k] = q[nn - j]
+            for k in range(nn):
+                pa[k] = max(pa[k], q[k])
+            j -= 1
+        adj = [0.0] * lp
+        for i in range(lp):
+            v = max(pa[i], ps[i])
+            adj[ro[i] if lp == nn else ro[i]] = v
+    else:
+        # BH and BY
+        o = sorted(range(lp), key=lambda i: -vals[i])
+        ro = sorted(range(lp), key=lambda i: o[i])
+        q = [0.0] * lp
+        acc = math.inf
+        c = 0.0
+        if method == "BY":
+            for k in range(1, n + 1):
+                c += 1.0 / float(k)
+        for i in range(lp):
+            v = float(n) / float(lp - i) * vals[o[i]]
+            if method == "BY":
+                v = c * float(n) / float(lp - i) * vals[o[i]]
+            if v < acc:
+                acc = v
+            q[i] = min(1.0, acc)
+        adj = [0.0] * lp
+        for i in range(lp):
+            adj[ro[i]] = q[i]
+    for i in range(lp):
+        out[where[i]] = adj[i]
+    return out
