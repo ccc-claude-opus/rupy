@@ -50,6 +50,7 @@ R's names, with `_` for `.`: `t.test` is `t_test`, `lower.tail` is `lower_tail`,
 | Multiple testing | `p_adjust` (holm, hochberg, hommel, bonferroni, BH, BY, none) |
 | Linear models | `lm` (the Householder QR of R's `lm.fit`), `anova` (of a model), `aov` (one-way), `predict` (with the confidence and prediction intervals); the summary of a model prints as `summary(lm(...))` does |
 | Tables | `table` (the contingency table of two vectors, printed as R prints it) |
+| Graphics | `graphics()` opens a device that writes SVG with R's layout: `plot`, `hist`, `density`, `boxplot`, `qqnorm`, `qqline`, `ecdf`, `curve`, `barplot`, and the primitives (`points`, `lines`, `segments`, `rect`, `polygon`, `text`, `axis`, `box`, `title`, `mtext`, `abline`, `legend`); the numbers of the plots come from `pretty`, `hist_stats`, `density_stats`, `ecdf`, `boxplot_stats` and `ppoints` |
 | Special functions | `gamma`, `lgamma`, `beta`, `lbeta`, `choose`, `lchoose` |
 | Printing | `format` (R's `format` of a numeric vector), `format_num`, `format_pval`, `print_vector`, `signif` |
 
@@ -100,6 +101,21 @@ Residual standard error: 0.1489 on 6 degrees of freedom
 Multiple R-squared:  0.8821,	Adjusted R-squared:  0.8624 
 F-statistic: 44.89 on 1 and 6 DF,  p-value: 0.0005366
 ```
+
+### Plots
+
+```python
+g = r.graphics(width=7, height=7)
+g.hist(x, main="Histogram of x", xlab="x", ylab="Frequency")
+g.save("hist.svg")
+```
+
+The device writes SVG: the margins are the lines of R's `mar`, the ticks
+and their labels stand `mgp[2]` lines from the axes, the ranges of the
+axes are extended by 4% at both ends (as R does) and the ticks come from
+`pretty()`.  `tests/plots/` holds the plots of R and of rstatistics side
+by side, and `tests/plots.py` compares the ranges of the axes and the
+positions of the ticks with R's `svg()`.
 
 ## How close to R
 

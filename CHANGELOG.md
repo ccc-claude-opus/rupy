@@ -8,6 +8,14 @@
   `prop_test`, `cor_test`, `summary`, `quantile` (types 1–9), `cor`, `mad`, `fivenum`, ...,
   printed as R prints them (formatReal, `print.htest`). `rstatistics/tests/run.py` compares it with
   R 4.6: printed output identical, distribution functions within a relative 1e-12.
+- **rstatistics 0.4.0**: R's graphics, in rstatistics: a device that writes SVG with R's
+  layout (`mar = c(5.1, 4.1, 4.1, 2.1)` lines, `mgp = c(3, 1, 0)`, the ranges extended by
+  4% at both ends, the ticks of `pretty()`), the primitives (points with the open circle of
+  `pch = 1`, lines, segments, rect, polygon, text, axis, box, title, mtext, abline, legend)
+  and the plots (`plot`, `hist`, `density`, `boxplot`, `qqnorm`, `qqline`, `ecdf`, `curve`,
+  `barplot`); the numbers of the plots come from the calculation layer (`pretty`,
+  `hist_stats`, `density_stats`, `ecdf`, `boxplot_stats`, `ppoints`), which agrees with R
+  to a relative 1e-12.
 - **rstatistics 0.3.0**: the linear models of R's stats package: `lm` fits a model with the
   Householder QR of R's `lm.fit` (the column pivoting of `dqrdc2` included, so a rank
   deficient fit drops the collinear coefficients as R does) and the summary of the fit

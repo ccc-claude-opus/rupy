@@ -19,4 +19,4 @@ from rstatistics.rformat import Table, format_vec, format_vec as format, format_
 from rstatistics.rng import RNG, set_seed
 from rstatistics.special import beta, choose, gamma, lbeta, lchoose, lgamma
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

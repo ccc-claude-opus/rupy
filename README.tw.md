@@ -219,7 +219,7 @@ g = r.set_seed(42)
 print(r.print_vector(g.rnorm(5)))
 ```
 
-`import rstatistics as r` 是 R 的機率統計函數：17 種分佈的 `d` / `p` / `q`、`set_seed` 之後與 R 相同的亂數（Mersenne-Twister、反函數法的常態亂數、`sample`；所有分佈的亂數都與 R 的 `src/nmath` 一位元不差）、`t_test`、`var_test`、`chisq_test`、`binom_test`、`prop_test`、`cor_test`、非參數檢定（`wilcox_test`、`ks_test`、`shapiro_test`、`fisher_test`、`kruskal_test`）、`p_adjust`、`table`、線性模型（`lm`、`anova`、`aov`、`predict`）、`summary`、`quantile`（九種）等，印出格式與 R 一字不差。名稱沿用 R，`.` 改成 `_`（`t.test` → `t_test`、`lower.tail` → `lower_tail`）。rstatistics 是用 rupy 本身寫成的套件（`rstatistics/`，在 PyPI 上是純 Python、無依賴），rupy 把它的原始碼和程式一起編譯，所以 Rust 與 wasm 後端都能用。`rstatistics/tests/run.py` 與 R 4.6 對照：印出結果相同，分佈函數的相對誤差在 1e-12 內。
+`import rstatistics as r` 是 R 的機率統計函數：17 種分佈的 `d` / `p` / `q`、`set_seed` 之後與 R 相同的亂數（Mersenne-Twister、反函數法的常態亂數、`sample`；所有分佈的亂數都與 R 的 `src/nmath` 一位元不差）、`t_test`、`var_test`、`chisq_test`、`binom_test`、`prop_test`、`cor_test`、非參數檢定（`wilcox_test`、`ks_test`、`shapiro_test`、`fisher_test`、`kruskal_test`）、`p_adjust`、`table`、線性模型（`lm`、`anova`、`aov`、`predict`）、`summary`、`quantile`（九種）等，印出格式與 R 一字不差；另有 R 繪圖的樣子（`graphics()` 開一個寫 SVG 的裝置，版面與 R 相同：`hist`、`density`、`boxplot`、`qqnorm`、`ecdf`、`curve`、`barplot`、`plot`）。名稱沿用 R，`.` 改成 `_`（`t.test` → `t_test`、`lower.tail` → `lower_tail`）。rstatistics 是用 rupy 本身寫成的套件（`rstatistics/`，在 PyPI 上是純 Python、無依賴），rupy 把它的原始碼和程式一起編譯，所以 Rust 與 wasm 後端都能用。`rstatistics/tests/run.py` 與 R 4.6 對照：印出結果相同，分佈函數的相對誤差在 1e-12 內。
 
 ## 測試
 

@@ -145,7 +145,9 @@ name are overloads, `@rust("...")` gives a Rust path or an expression template, 
   `set_seed` with R's random numbers (bit for bit), `t_test` and the other common tests,
   the nonparametric tests (`wilcox_test`, `ks_test`, `shapiro_test`, `fisher_test`,
   `kruskal_test`), the linear models (`lm`, `anova`, `aov`, `predict`), `p_adjust`,
-  `table`, `summary`, `quantile`, ...), printed as R prints them. Unlike the packages above it is written in
+  `table`, `summary`, `quantile`, ...), printed as R prints them, and the plots of R's
+  graphics (`graphics()` opens a device that writes SVG with R's layout: `hist`,
+  `density`, `boxplot`, `qqnorm`, `ecdf`, `curve`, `barplot`, `plot`). Unlike the packages above it is written in
   rupy itself (`rstatistics/`, also on PyPI as pure Python: `pip install rstatistics`): rupy compiles its source with the
   program, so it runs on the Rust and the wasm backends alike. See
   [rstatistics/README.md](rstatistics/README.md).
