@@ -191,6 +191,7 @@ class LMSummary:
         f_statistic: list[float],
         df: list[float],
         aliased: list[str],
+        digmin: int,
     ) -> None:
         self.call = call
         self.residuals = residuals
@@ -205,6 +206,7 @@ class LMSummary:
         self.f_statistic = f_statistic
         self.df = df
         self.aliased = aliased
+        self.digmin = digmin
 
     def __str__(self) -> str:
         digits = 4
@@ -317,12 +319,15 @@ class LM:
             se.append(math.nan)
             tval.append(math.nan)
             pval.append(math.nan)
+        acs: list[float] = []
         for i in range(int(p)):
             j = self.pivot[i]
             estimates[j] = self.coefficients[j]
             se[j] = math.sqrt(diag[i] * resvar)
             tval[j] = estimates[j] / se[j]
             pval[j] = 2.0 * pt(abs(tval[j]), rdf, lower_tail=False)
+            acs.append(abs(estimates[j]))
+            acs.append(abs(se[j]))
         df_int = 1.0 if self.intercept else 0.0
         f_statistic = [0.0, 0.0, 0.0]
         if p > df_int:
@@ -337,6 +342,15 @@ class LM:
             if math.isnan(self.coefficients[i]):
                 aliased.append(self.names[i])
         names = list(self.names)
+        # the digits before the decimal point of the smallest coefficient
+        # (R computes it from the estimates in the order of the pivoting)
+        digmin = 0
+        smallest = math.inf
+        for a in acs:
+            if a != 0.0 and math.isfinite(a) and a < smallest:
+                smallest = a
+        if smallest != math.inf:
+            digmin = 1 + int(math.floor(math.log10(smallest)))
         return LMSummary(
             self.call,
             list(r),
@@ -351,6 +365,7 @@ class LM:
             f_statistic,
             [p, rdf, float(len(self.coefficients))],
             aliased,
+            digmin,
         )
 
 
@@ -432,21 +447,12 @@ def _lm_coefmat(s: LMSummary) -> str:
     digits = 4
     n = len(s.estimates)
     # the estimates and their standard errors, rounded as R rounds them
-    acs: list[float] = []
-    for i in range(n):
-        acs.append(abs(s.estimates[i]))
-    for i in range(n):
-        acs.append(abs(s.std_errors[i]))
-    digmin = 0
-    smallest = math.inf
-    for v in acs:
-        if v != 0.0 and math.isfinite(v) and v < smallest:
-            smallest = v
-    if smallest != math.inf:
-        digmin = 1 + int(math.floor(math.log10(smallest)))
+    digmin = s.digmin
     ndec = max(1, digits - digmin)
-    est_c = format_vec([round(v, ndec) for v in s.estimates], digits)
-    se_c = format_vec([round(v, ndec) for v in s.std_errors], digits)
+    # the estimates and their standard errors share one format
+    both = format_vec([round(v, ndec) for v in s.estimates] + [round(v, ndec) for v in s.std_errors], digits)
+    est_c = both[: len(s.estimates)]
+    se_c = both[len(s.estimates):]
     dig_tst = max(1, min(5, digits - 1))
     t_c = format_vec([round(v, dig_tst) for v in s.t_values], digits)
     p_c = format_vec(s.p_values, dig_tst)
@@ -612,7 +618,7 @@ def _lm_anova_table(a: Anova) -> str:
     f_pos: list[int] = []
     for i in range(n):
         if not math.isnan(a.f[i]):
-            f_vals.append(round(a.f[i], 4))
+            f_vals.append(round(a.f[i], dig_tst))
             f_pos.append(i)
     f_c = [""] * n
     if len(f_vals) > 0:
