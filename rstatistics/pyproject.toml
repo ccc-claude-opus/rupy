@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rstatistics"
-version = "0.1.1"
-description = "R's probability and statistics functions in pure Python: d/p/q/r distributions, t.test and friends, summary, quantile, with R's numbers and R's printed output"
+version = "0.2.0"
+description = "R's probability and statistics functions in pure Python: d/p/q/r distributions, the tests of the stats package, summary, quantile, with R's numbers and R's printed output"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"

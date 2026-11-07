@@ -43,10 +43,12 @@ R's names, with `_` for `.`: `t.test` is `t_test`, `lower.tail` is `lower_tail`,
 
 | Area | Functions |
 | --- | --- |
-| Distributions (`d`, `p`, `q`) | `norm`, `unif`, `exp`, `gamma`, `chisq`, `beta`, `t`, `f` (`df`, `pf`, `qf`), `lnorm`, `weibull`, `cauchy`, `logis`, `binom`, `pois`, `geom`, `nbinom` (`d`, `p`), `hyper` (`d`, `p`); `lower_tail` and `log_p` as in R |
-| Random numbers | `set_seed(seed)` returns a generator with R's numbers: `runif`, `rnorm`, `rexp`, `rlnorm`, `sample`, `sample_from` |
+| Distributions (`d`, `p`, `q`) | `norm`, `unif`, `exp`, `gamma`, `chisq`, `beta`, `t`, `f` (`df`, `pf`, `qf`), `lnorm`, `weibull`, `cauchy`, `logis`, `binom`, `pois`, `geom`, `nbinom`, `hyper`; `lower_tail` and `log_p` as in R; `dnbinom_mu` for the negative binomial with a mean |
+| Random numbers | `set_seed(seed)` returns a generator with R's numbers: `runif`, `rnorm`, `rexp`, `rlnorm`, `rgamma`, `rbeta`, `rt`, `rf`, `rchisq`, `rcauchy`, `rlogis`, `rweibull`, `rbinom`, `rpois`, `rgeom`, `rnbinom`, `rhyper`, `sample`, `sample_from` |
 | Descriptive | `mean`, `var`, `sd`, `cov`, `cor` (pearson, spearman, kendall), `median`, `quantile` (types 1–9), `IQR`, `mad`, `fivenum`, `rank`, `scale`, `weighted_mean`, `summary` |
-| Tests | `t_test` (one-sample, Welch, pooled, paired), `var_test`, `chisq_test`, `chisq_test_table`, `binom_test`, `prop_test`, `cor_test`; each returns an `HTest` that prints as R's `htest` and has `statistic`, `parameter`, `p_value`, `conf_int`, `estimate` |
+| Tests | `t_test` (one-sample, Welch, pooled, paired), `var_test`, `chisq_test`, `chisq_test_table`, `binom_test`, `prop_test`, `cor_test`, `wilcox_test` (rank sum and signed rank), `ks_test` (Kolmogorov-Smirnov), `shapiro_test`, `fisher_test`, `kruskal_test`; each returns an `HTest` that prints as R's `htest` and has `statistic`, `parameter`, `p_value`, `conf_int`, `estimate` |
+| Multiple testing | `p_adjust` (holm, hochberg, hommel, bonferroni, BH, BY, none) |
+| Tables | `table` (the contingency table of two vectors, printed as R prints it) |
 | Special functions | `gamma`, `lgamma`, `beta`, `lbeta`, `choose`, `lchoose` |
 | Printing | `format` (R's `format` of a numeric vector), `format_num`, `format_pval`, `print_vector`, `signif` |
 
@@ -54,7 +56,10 @@ R's names, with `_` for `.`: `t.test` is `t_test`, `lower.tail` is `lower_tail`,
 
 R keeps one generator for the session; rstatistics passes it explicitly. After
 `set_seed(n)` the numbers are R's after `set.seed(n)` (Mersenne-Twister, normal
-numbers by inversion, R ≥ 3.6's rejection sampling):
+numbers by inversion, R ≥ 3.6's rejection sampling), and the other generators are R's
+own (Ahrens and Dieter's gamma and exponential, Cheng's beta, the BTPE binomial, the
+normal rejection Poisson, Kachitvichyanukul and Schmeiser's hypergeometric), to the
+last bit:
 
 ```python
 g = r.set_seed(42)
@@ -66,8 +71,10 @@ print(r.print_vector(g.rnorm(5)))
 
 `tests/` holds R scripts, their output in R 4.6, and the same programs in Python;
 `python tests/run.py` compares them (`--regen` reruns R first). The printed output
-of the tests, `format`, `summary`, `quantile` and the random numbers is identical
-to R's; distribution functions agree with R to a relative 1e-12. One difference:
+of the tests, `format`, `summary`, `quantile`, `table` and the random numbers is
+identical to R's; the distribution functions and the nonparametric tests agree with
+R to a relative 1e-12 (the quantiles are R's, except where p is exactly a value of
+the distribution function, where the two incomplete betas differ by an ulp). One difference:
 R names the data of a test from the call (`data:  c(20, 30, 25, 25)`), rstatistics from
 the `data_name` argument (default `x`, `x and y`, ...).
 

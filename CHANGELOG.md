@@ -8,10 +8,20 @@
   `prop_test`, `cor_test`, `summary`, `quantile` (types 1–9), `cor`, `mad`, `fivenum`, ...,
   printed as R prints them (formatReal, `print.htest`). `rstatistics/tests/run.py` compares it with
   R 4.6: printed output identical, distribution functions within a relative 1e-12.
+- **rstatistics 0.2.0**: the random numbers of all the distributions are R's to the last bit
+  (Ahrens and Dieter's gamma and exponential, Cheng's beta, the BTPE binomial, the normal
+  rejection Poisson, Kachitvichyanukul and Schmeiser's hypergeometric, as R's `src/nmath`
+  computes them; R's compiler contracts the floating point expressions, so rupy gained
+  `math.fma`); `qnbinom`, `qhyper` and `dnbinom` with a mean; the nonparametric tests of R's
+  stats package (`wilcox_test`, `ks_test`, `shapiro_test`, `fisher_test`, `kruskal_test`),
+  `p_adjust` and `table`.
 - **Packages written in rupy**: `import rstatistics` compiles its source with the program (the
   source is built into rupy), its top-level names renamed so they cannot clash with the
   program's; it works on the Rust and the wasm backends.
 - The builtin `format(value, spec)`; `math.log1p`, `math.expm1`, `math.nan`.
+- `math.fma(x, y, z)`, the fused multiply-add of Python 3.13, on the Rust and the wasm
+  backends: R's compiler contracts its floating point expressions, so the numbers of R's
+  generators need it.
 - The wasm backend unpacks lists (`a, b = s.split("e")`), with Python's length errors.
 - **The wasm backend runs the packages implemented in Rust** (numpy, sklearn, gymnasium,
   torch, `rupy.json`, `shlex`, `fnmatch`, `html`), in browsers too. They are compiled

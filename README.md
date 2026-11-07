@@ -142,8 +142,9 @@ name are overloads, `@rust("...")` gives a Rust path or an expression template, 
 - **rupy.json**, **rupy.http**: a typed JSON value and an HTTP(S) client, with CPython
   stand-ins in `python/rupy/`.
 - **rstatistics**: R's probability and statistics functions (`d`/`p`/`q` of 17 distributions,
-  `set_seed` with R's random numbers, `t_test` and the other common tests, `summary`,
-  `quantile`, ...), printed as R prints them. Unlike the packages above it is written in
+  `set_seed` with R's random numbers (bit for bit), `t_test` and the other common tests,
+  the nonparametric tests (`wilcox_test`, `ks_test`, `shapiro_test`, `fisher_test`,
+  `kruskal_test`), `p_adjust`, `table`, `summary`, `quantile`, ...), printed as R prints them. Unlike the packages above it is written in
   rupy itself (`rstatistics/`, also on PyPI as pure Python: `pip install rstatistics`): rupy compiles its source with the
   program, so it runs on the Rust and the wasm backends alike. See
   [rstatistics/README.md](rstatistics/README.md).
