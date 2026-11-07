@@ -48,6 +48,7 @@ R's names, with `_` for `.`: `t.test` is `t_test`, `lower.tail` is `lower_tail`,
 | Descriptive | `mean`, `var`, `sd`, `cov`, `cor` (pearson, spearman, kendall), `median`, `quantile` (types 1–9), `IQR`, `mad`, `fivenum`, `rank`, `scale`, `weighted_mean`, `summary` |
 | Tests | `t_test` (one-sample, Welch, pooled, paired), `var_test`, `chisq_test`, `chisq_test_table`, `binom_test`, `prop_test`, `cor_test`, `wilcox_test` (rank sum and signed rank), `ks_test` (Kolmogorov-Smirnov), `shapiro_test`, `fisher_test`, `kruskal_test`; each returns an `HTest` that prints as R's `htest` and has `statistic`, `parameter`, `p_value`, `conf_int`, `estimate` |
 | Multiple testing | `p_adjust` (holm, hochberg, hommel, bonferroni, BH, BY, none) |
+| Linear models | `lm` (the Householder QR of R's `lm.fit`), `anova` (of a model), `aov` (one-way), `predict` (with the confidence and prediction intervals); the summary of a model prints as `summary(lm(...))` does |
 | Tables | `table` (the contingency table of two vectors, printed as R prints it) |
 | Special functions | `gamma`, `lgamma`, `beta`, `lbeta`, `choose`, `lchoose` |
 | Printing | `format` (R's `format` of a numeric vector), `format_num`, `format_pval`, `print_vector`, `signif` |
@@ -67,12 +68,45 @@ print(r.print_vector(g.rnorm(5)))
 # [1]  1.3709584 -0.5646982  0.3631284  0.6328626  0.4042683
 ```
 
+### Linear models
+
+`lm(y, X)` fits `y` on the columns of `X` (one column per predictor) with the
+Householder QR of R's `lm.fit`, so the coefficients, the standard errors and the
+rank of a rank deficient fit are R's:
+
+```python
+x = [5.1, 4.9, 6.2, 5.8, 6.0, 5.5, 5.3, 6.1]
+y = [1.2, 1.4, 2.1, 1.9, 2.3, 1.7, 1.5, 2.2]
+m = r.lm(y, [x], ["x"])
+print(m.summary())
+```
+
+```
+Call:
+lm(formula = y ~ x)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-0.18923 -0.06950 -0.01664  0.06679  0.21137 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  -2.5740     0.6531  -3.941 0.007615 ** 
+x             0.7771     0.1160   6.700 0.000537 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.1489 on 6 degrees of freedom
+Multiple R-squared:  0.8821,	Adjusted R-squared:  0.8624 
+F-statistic: 44.89 on 1 and 6 DF,  p-value: 0.0005366
+```
+
 ## How close to R
 
 `tests/` holds R scripts, their output in R 4.6, and the same programs in Python;
 `python tests/run.py` compares them (`--regen` reruns R first). The printed output
-of the tests, `format`, `summary`, `quantile`, `table` and the random numbers is
-identical to R's; the distribution functions and the nonparametric tests agree with
+of the tests, `format`, `summary`, `quantile`, `table`, the linear models and the
+random numbers is identical to R's; the distribution functions and the nonparametric tests agree with
 R to a relative 1e-12 (the quantiles are R's, except where p is exactly a value of
 the distribution function, where the two incomplete betas differ by an ulp). One difference:
 R names the data of a test from the call (`data:  c(20, 30, 25, 25)`), rstatistics from

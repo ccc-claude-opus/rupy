@@ -11,7 +11,7 @@
 | 第一批 | `hist`、`plot(density(x))`、`boxplot`、`qqnorm` / `qqline`、`plot(ecdf(x))`、`curve` | 分佈形狀、常態性檢查、經驗分佈、理論密度 |
 | 第一批 | `plot(x, y)`（`type = "p" / "l" / "b" / "h" / "s"`）、`barplot`、`abline`、`legend` | 基本圖與疊加 |
 | 第二批 | `qqplot`、`stripchart`、`pairs`、`matplot`、`par(mfrow=)` | 比較與多變數 |
-| 之後 | `plot(lm)` 診斷圖（要先有 `lm`）、`mosaicplot`、`pie` | 視需要 |
+| 之後 | `plot(lm)` 診斷圖（`lm` 已在 rstatistics 0.3.0 完成）、`mosaicplot`、`pie` | 視需要 |
 
 ## 二、架構
 

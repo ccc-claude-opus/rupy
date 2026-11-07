@@ -8,6 +8,12 @@
   `prop_test`, `cor_test`, `summary`, `quantile` (types 1–9), `cor`, `mad`, `fivenum`, ...,
   printed as R prints them (formatReal, `print.htest`). `rstatistics/tests/run.py` compares it with
   R 4.6: printed output identical, distribution functions within a relative 1e-12.
+- **rstatistics 0.3.0**: the linear models of R's stats package: `lm` fits a model with the
+  Householder QR of R's `lm.fit` (the column pivoting of `dqrdc2` included, so a rank
+  deficient fit drops the collinear coefficients as R does) and the summary of the fit
+  prints as `print(summary(lm(...)))` does; `anova` and `aov` give the analysis of
+  variance of a model and of a one-way layout, `predict` the predictions of a model
+  with the confidence and the prediction intervals.
 - **rstatistics 0.2.0**: the random numbers of all the distributions are R's to the last bit
   (Ahrens and Dieter's gamma and exponential, Cheng's beta, the BTPE binomial, the normal
   rejection Poisson, Kachitvichyanukul and Schmeiser's hypergeometric, as R's `src/nmath`

@@ -19,6 +19,7 @@ const BUILTIN: &[(&str, &str, &str)] = &[
     ("rstatistics", "distributions.py", include_str!("../rstatistics/rstatistics/distributions.py")),
     ("rstatistics", "describe.py", include_str!("../rstatistics/rstatistics/describe.py")),
     ("rstatistics", "htest.py", include_str!("../rstatistics/rstatistics/htest.py")),
+    ("rstatistics", "lm.py", include_str!("../rstatistics/rstatistics/lm.py")),
     ("rstatistics", "rformat.py", include_str!("../rstatistics/rstatistics/rformat.py")),
     ("rstatistics", "rng.py", include_str!("../rstatistics/rstatistics/rng.py")),
     ("rstatistics", "special.py", include_str!("../rstatistics/rstatistics/special.py")),
