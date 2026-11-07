@@ -1,0 +1,21 @@
+   y
+x   p q
+  a 2 0
+  b 0 1
+  c 0 1
+x
+a b c 
+2 1 1 
+    
+     pp qq
+  aa  2  0
+  bb  0  1
+   
+    w x y z
+  a 0 1 0 0
+  b 0 0 1 0
+  c 0 0 0 1
+  d 1 0 0 0
+
+  aa    b   cc dddd 
+   1    1    1    1 

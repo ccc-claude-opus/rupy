@@ -1,0 +1,7 @@
+x <- c("a", "b", "a", "c")
+y <- c("p", "q", "p", "q")
+print(table(x, y))
+print(table(x))
+print(table(c("aa", "bb", "aa"), c("pp", "qq", "pp")))
+print(table(c("a", "b", "c", "d"), c("x", "y", "z", "w")))
+print(table(c("aa", "b", "cc", "dddd")))

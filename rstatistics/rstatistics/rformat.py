@@ -158,3 +158,134 @@ def format_pval(p: float, digits: int = 4) -> str:
     if p < eps:
         return "< " + format_num(eps, digits)
     return format_num(p, digits)
+
+
+class Table:
+    """A contingency table (the result of R's `table`)."""
+
+    def __init__(self, counts: list[float], dim: list[int], dimnames: list[list[str]], names: list[str]) -> None:
+        self.counts = counts
+        self.dim = dim
+        self.dimnames = dimnames
+        self.names = names
+
+    def __str__(self) -> str:
+        return _print_table(self.counts, self.dim, self.dimnames, self.names)
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    def total(self) -> float:
+        """The sum of the counts."""
+        s = 0.0
+        for c in self.counts:
+            s += c
+        return s
+
+    def as_list(self) -> list[float]:
+        """The counts, as R stores them (the first dimension varies fastest)."""
+        return list(self.counts)
+
+
+def _levels(xs: list[str]) -> list[str]:
+    """The distinct values of a vector, sorted (R's factor levels)."""
+    out: list[str] = []
+    for x in xs:
+        if x not in out:
+            out.append(x)
+    out.sort()
+    return out
+
+
+def table(x: list[str], y: list[str] | None = None, x_name: str = "x", y_name: str = "y") -> Table:
+    """The contingency table of the values of x (and of y), as R's `table`."""
+    if len(x) == 0:
+        raise ValueError("no inputs")
+    lx = _levels(x)
+    if y is None:
+        counts = [0.0] * len(lx)
+        for v in x:
+            counts[lx.index(v)] += 1.0
+        return Table(counts, [len(lx)], [lx], [x_name])
+    if len(x) != len(y):
+        raise ValueError("'x' and 'y' must have the same length")
+    ly = _levels(y)
+    counts = [0.0] * (len(lx) * len(ly))
+    for i in range(len(x)):
+        a = lx.index(x[i])
+        b = ly.index(y[i])
+        counts[a + b * len(lx)] += 1.0
+    return Table(counts, [len(lx), len(ly)], [lx, ly], [x_name, y_name])
+
+
+def _print_table(counts: list[float], dim: list[int], dimnames: list[list[str]], names: list[str]) -> str:
+    """The table as R prints it."""
+    if len(dim) == 1:
+        labels = dimnames[0]
+        cells = format_vec(counts, 7)
+        w1 = 1
+        for c in cells:
+            if len(c) > w1:
+                w1 = len(c)
+        for l in labels:
+            if len(l) > w1:
+                w1 = len(l)
+        lines = []
+        if len(names) > 0:
+            lines.append(names[0])
+        if labels:
+            lines.append(" ".join(l.rjust(w1) for l in labels) + " ")
+        lines.append(" ".join(c.rjust(w1) for c in cells) + " ")
+        return "\n".join(lines)
+    # a two-dimensional table, printed as R prints a matrix with dimnames
+    nr = dim[0]
+    nc = dim[1]
+    rl = dimnames[0]
+    cl = dimnames[1]
+    rn = ""
+    cn = ""
+    if len(names) > 0:
+        rn = names[0]
+    if len(names) > 1:
+        cn = names[1]
+    # the width of the row labels
+    rlabw = 0
+    for l in rl:
+        if len(l) > rlabw:
+            rlabw = len(l)
+    lbloff = 0
+    if len(names) > 0:
+        rnw = len(rn)
+        if rnw < rlabw + 2:
+            lbloff = 2
+        else:
+            lbloff = rnw - rlabw
+        rlabw += lbloff
+    # the width of the columns
+    wcols = [0] * nc
+    for j in range(nc):
+        col: list[float] = []
+        for i in range(nr):
+            col.append(counts[i + j * nr])
+        cw = len(format_vec(col, 7)[0])
+        if j < len(cl) and len(cl[j]) > cw:
+            cw = len(cl[j])
+        wcols[j] = cw + 1
+    cells = [format_num(c, 7) for c in counts]
+    lines = []
+    lines.append(" " * rlabw + cn)
+    if rn != "":
+        lines.append(rn.ljust(rlabw))
+    else:
+        lines.append(" " * rlabw)
+    for j in range(nc):
+        if j < len(cl):
+            lines[-1] += " " * (wcols[j] - len(cl[j])) + cl[j]
+        else:
+            lines[-1] += " " * wcols[j]
+    for i in range(nr):
+        line = " " * lbloff + rl[i] + " " * (rlabw - len(rl[i]) - lbloff)
+        for j in range(nc):
+            line += cells[i + j * nr].rjust(wcols[j])
+        lines.append(line)
+    return "\n".join(lines)
