@@ -1121,14 +1121,14 @@ class Graphics:
             self.segments([e.x[0], e.x[len(e.x) - 1]], [e.y[0], e.y[len(e.y) - 1]], [e.x[0], e.x[len(e.x) - 1]], [e.y[0], e.y[len(e.y) - 1]], col)
         return e
 
-    def curve(self, name: str, from_: float, to: float, n: int = 101, col: str = "", lwd: float = 0.0) -> None:
+    def curve(self, name: str, from_: float, to: float, mean: float = 0.0, sd: float = 1.0, n: int = 101, col: str = "", lwd: float = 0.0) -> None:
         """The curve of a distribution, named as in R ("dnorm", "dunif", ...)."""
         xs: list[float] = []
         ys: list[float] = []
         for i in range(n):
             x = from_ + (to - from_) * float(i) / float(n - 1)
             xs.append(x)
-            ys.append(_lm_density(name, x))
+            ys.append(_lm_density(name, x, mean, sd))
         self.lines(xs, ys, col, lwd)
 
     def barplot(self, heights: list[float], labels: list[str], main: str = "", xlab: str = "", ylab: str = "", col: str = "") -> None:
@@ -1177,10 +1177,10 @@ def _svg_escape(s: str) -> str:
             out += ch
     return out
 
-def _lm_density(name: str, x: float) -> float:
+def _lm_density(name: str, x: float, mean: float = 0.0, sd: float = 1.0) -> float:
     """The density of the distribution `name` at x (as R's dnorm, dunif, ...)."""
     if name == "dnorm":
-        return dnorm(x, 0.0, 1.0)
+        return dnorm(x, mean, sd)
     if name == "dunif":
         return dunif(x, 0.0, 1.0)
     if name == "dexp":
