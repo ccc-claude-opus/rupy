@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-NAMES = ["dist", "format", "rng", "rng2", "htest", "table"]
+NAMES = ["dist", "format", "rng", "rng2", "htest", "table", "lm"]
 
 
 def close(a: str, b: str) -> bool:

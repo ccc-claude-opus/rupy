@@ -12,6 +12,7 @@ from rstatistics.distributions import (
     qnorm, qnbinom, qpois, qt, qunif, qweibull,
 )
 from rstatistics.describe import IQR, Named, Summary, cor, cov, fivenum, mad, mean, median, quantile, rank, scale, sd, summary, var, weighted_mean
+from rstatistics.lm import AOV, Anova, LM, Predict, aov, anova, lm, predict
 from rstatistics.htest import HTest, binom_test, chisq_test, chisq_test_table, cor_test, fisher_test, ks_test, kruskal_test, p_adjust, prop_test, shapiro_test, t_test, var_test, wilcox_test
 from rstatistics.rformat import Table, format_vec, format_vec as format, format_num, format_pval, print_vector, signif, table
 from rstatistics.rng import RNG, set_seed
