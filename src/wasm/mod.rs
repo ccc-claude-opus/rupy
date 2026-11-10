@@ -6,7 +6,7 @@
 //! (`node rupy_wasm.mjs prog.wasm`).
 //!
 //! The translator itself builds for `wasm32-unknown-unknown`, so rupy can be
-//! compiled to wasm inside a browser ([`compile_source`]).
+//! compiled to wasm inside a browser ([`compile_source`], [`compile_files`]).
 //!
 //! Not every rupy program compiles yet: generators, closures over reassigned
 //! variables, files, `re` and the Rust-backed packages report "the wasm
@@ -49,6 +49,35 @@ pub fn compile_source(src: &str) -> Result<Vec<u8>, String> {
     let prog = crate::front::lower_modules(&c.src, &crate::front::default_stub_dirs(), &c.modules).map_err(|e| format!("{}: {}", at(e.line), e.msg))?;
     crate::own::analyze(&prog).map_err(|e| format!("{}: {}", at(e.line), e.msg))?;
     compile(&prog)
+}
+
+/// An error of [`compile_files`]: the file, the line in it (0: none) and the message.
+#[derive(Debug, PartialEq)]
+pub struct FileErr {
+    pub file: String,
+    pub line: u32,
+    pub msg: String,
+    pub hint: Option<String>,
+}
+
+/// Compile a program of several files without the disk (a browser IDE's
+/// workspace): `main` and the local modules it imports, from `files` (path →
+/// text, paths relative to one folder).
+pub fn compile_files(main: &str, files: &HashMap<std::path::PathBuf, String>) -> Result<Vec<u8>, FileErr> {
+    let path = std::path::Path::new(main);
+    let err = |file: &std::path::Path, e: crate::diag::Error| FileErr { file: file.display().to_string(), line: e.line, msg: e.msg, hint: e.hint };
+    let text = files.get(path).cloned().ok_or_else(|| FileErr { file: main.into(), line: 0, msg: format!("no file {}", main), hint: None })?;
+    let c = crate::modules::combine_in(path, text, files).map_err(|(f, _, e)| err(&f, e))?;
+    let at = |e: crate::diag::Error| {
+        if e.line == 0 {
+            return err(path, e);
+        }
+        let (f, _, line) = c.locate(e.line);
+        err(&f, crate::diag::Error { line, ..e })
+    };
+    let prog = crate::front::lower_modules(&c.src, &crate::front::default_stub_dirs(), &c.modules).map_err(at)?;
+    crate::own::analyze(&prog).map_err(at)?;
+    compile(&prog).map_err(|msg| FileErr { file: main.into(), line: 0, msg, hint: None })
 }
 
 /// Compile a checked program.

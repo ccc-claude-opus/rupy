@@ -2,7 +2,7 @@
 // rendered Markdown (double-click to edit). Running cell k runs code cells
 // 0..k as one program (nbformat.mjs) and splits the output among them.
 import { parseNotebook, serializeNotebook, buildProgram, locate, outputSplitter, newCell } from "./nbformat.mjs";
-import { errorLines } from "./runner.mjs";
+import { formatError, markerMessage } from "./runner.mjs";
 
 let markdownModule = null;
 const markdown = () => (markdownModule ??= import("./markdown.mjs"));
@@ -294,13 +294,14 @@ export class NotebookView {
       }
       this.appendOutput(i, "stdout", text);
     });
+    const project = await this.opts.project(src);
     const r = ran.length
-      ? await runner.request("run", src, {
+      ? await runner.request("run", project, {
           stdin: this.opts.stdin(),
           onOutput: (fd, text) => (fd === 1 ? split.feed(text) : this.appendOutput(split.current >= 0 ? split.current : ran[0], "stderr", text)),
         })
       : { type: "done", code: 0, compileMs: 0, runMs: 0, bytes: 0 };
-    if (r.error) this.showCompileError(r.error, starts);
+    if (r.error) this.showCompileError(r.error, starts, project.main);
     else if (r.stopped) this.appendOutput(split.current >= 0 ? split.current : ran[0], "stderr", "[已停止]\n");
     for (const i of ran) {
       const it = this.items[i];
@@ -312,14 +313,16 @@ export class NotebookView {
     return { ...r, cells: started.length };
   }
 
-  showCompileError(error, starts) {
-    const found = errorLines(error).filter((e) => e.file === null);
-    if (!found.length) return this.appendOutput(starts[starts.length - 1]?.cell ?? 0, "stderr", error + "\n");
-    for (const { line, msg } of found) {
-      const at = locate(starts, line) ?? { cell: starts[0].cell, line: 1 };
-      this.appendOutput(at.cell, "stderr", `第 ${at.line} 行：${msg}\n`);
-    }
-    this.setMarkers(error, starts);
+  /** Where an error is: { cell, line } in this notebook, or null (another file, or no line). */
+  where(error, starts, main) {
+    return error.file === main && error.line ? locate(starts, error.line) : null;
+  }
+
+  showCompileError(error, starts, main) {
+    const at = this.where(error, starts, main);
+    if (at) this.appendOutput(at.cell, "stderr", `第 ${at.line} 行：${error.msg}${error.hint ? `\n  提示：${error.hint}` : ""}\n`);
+    else this.appendOutput(starts[starts.length - 1]?.cell ?? 0, "stderr", formatError(error.file === main ? { ...error, file: "筆記本" } : error) + "\n");
+    this.setMarkers(error, starts, main);
   }
 
   // ---------------------------------------------------- errors as you type
@@ -327,30 +330,34 @@ export class NotebookView {
   /** Compile every code cell with `checker`; mark the errors in their cells. */
   async check(checker) {
     const { src, starts } = buildProgram(this.nb.cells);
-    const r = await checker.request("compile", src);
+    const project = await this.opts.project(src);
+    const r = await checker.request("compile", project);
     if (r.stopped || !this.items.length) return false;
-    this.setMarkers(r.error, starts);
+    this.setMarkers(r.error, starts, project.main);
     return true;
   }
 
-  setMarkers(error, starts) {
+  /** Mark `error` (null: none) in its cell; an error in another file is marked
+   *  there (opts.markOther) and, as a warning, on the first code cell. */
+  setMarkers(error, starts, main) {
     const { monaco } = this.opts;
-    const byCell = new Map();
-    for (const { line, msg, file } of error ? errorLines(error) : []) {
-      if (file !== null) continue;
-      const at = locate(starts, line);
-      if (!at) continue;
-      if (!byCell.has(at.cell)) byCell.set(at.cell, []);
-      byCell.get(at.cell).push({ line: at.line, msg });
-    }
+    const at = error && this.where(error, starts, main);
+    const other = error && !at && error.file !== main ? error : null;
+    this.opts.markOther?.(other);
+    const first = this.items.findIndex((it) => it.cell.type === "code");
     this.items.forEach((it, i) => {
       if (it.cell.type !== "code") return;
       const model = it.editor.getModel();
-      const marks = (byCell.get(i) ?? []).map(({ line, msg }) => {
-        const l = Math.min(line, model.getLineCount());
-        return { severity: monaco.MarkerSeverity.Error, message: msg, startLineNumber: l, startColumn: model.getLineFirstNonWhitespaceColumn(l) || 1, endLineNumber: l, endColumn: model.getLineMaxColumn(l) };
-      });
+      const marks = [];
+      if (at && at.cell === i) marks.push(lineMarker(monaco, model, at.line, markerMessage(error), monaco.MarkerSeverity.Error));
+      else if (error && !at && i === first) marks.push(lineMarker(monaco, model, 1, other ? `${error.file} 第 ${error.line} 行有錯誤：${markerMessage(error)}` : markerMessage(error), other ? monaco.MarkerSeverity.Warning : monaco.MarkerSeverity.Error));
       monaco.editor.setModelMarkers(model, "rupy", marks);
     });
   }
+}
+
+/** A marker over line `line` of `model`. */
+export function lineMarker(monaco, model, line, message, severity) {
+  const l = Math.min(Math.max(line, 1), model.getLineCount());
+  return { severity, message, startLineNumber: l, startColumn: model.getLineFirstNonWhitespaceColumn(l) || 1, endLineNumber: l, endColumn: model.getLineMaxColumn(l) };
 }

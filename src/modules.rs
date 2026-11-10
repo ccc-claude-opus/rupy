@@ -22,6 +22,34 @@ pub struct Combined {
 /// An error in file `.0` (whose text is `.1`).
 pub type FileError = (PathBuf, String, Error);
 
+/// Where a program's files come from: the disk, or (in a browser) a set of
+/// texts by path.
+pub trait Files {
+    fn read(&self, p: &Path) -> std::io::Result<String>;
+    fn exists(&self, p: &Path) -> bool;
+}
+
+/// The files on the disk.
+pub struct Disk;
+
+impl Files for Disk {
+    fn read(&self, p: &Path) -> std::io::Result<String> {
+        std::fs::read_to_string(p)
+    }
+    fn exists(&self, p: &Path) -> bool {
+        p.exists()
+    }
+}
+
+impl Files for std::collections::HashMap<PathBuf, String> {
+    fn read(&self, p: &Path) -> std::io::Result<String> {
+        self.get(p).cloned().ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("no file {}", p.display())))
+    }
+    fn exists(&self, p: &Path) -> bool {
+        self.contains_key(p)
+    }
+}
+
 impl Combined {
     /// The file, its text and the line within it of a line of `src`.
     pub fn locate(&self, line: u32) -> (PathBuf, String, u32) {
@@ -87,8 +115,13 @@ pub fn combine(path: &Path) -> Result<Combined, FileError> {
 /// [`combine`] of a program whose text is given (in a browser: no files but
 /// the packages built into rupy).
 pub fn combine_text(path: &Path, main: String) -> Result<Combined, FileError> {
+    combine_in(path, main, &Disk)
+}
+
+/// [`combine_text`] with the local modules from `files`.
+pub fn combine_in(path: &Path, main: String, files: &dyn Files) -> Result<Combined, FileError> {
     let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    let read = |p: &Path| std::fs::read_to_string(p).map_err(|e| (p.to_path_buf(), String::new(), Error::new(0, e.to_string())));
+    let read = |p: &Path| files.read(p).map_err(|e| (p.to_path_buf(), String::new(), Error::new(0, e.to_string())));
     let mut out = Combined { src: String::new(), parts: vec![], modules: vec![] };
     let main_text = main.clone();
     // (file, text, is the main file, the package it belongs to)
@@ -113,7 +146,7 @@ pub fn combine_text(path: &Path, main: String) -> Result<Combined, FileError> {
             // a package written in rupy
             let pkg_of = |m: &str| {
                 let root = m.split('.').next().unwrap_or(m);
-                (crate::pkgsrc::is_package(root) && !dir.join(format!("{}.py", root)).exists()).then(|| root.to_string())
+                (crate::pkgsrc::is_package(root) && !files.exists(&dir.join(format!("{}.py", root)))).then(|| root.to_string())
             };
             match s {
                 AStmt::Import(i) if i.names.iter().any(|a| pkg_of(a.name.id.as_str()).is_some()) => {
@@ -150,7 +183,7 @@ pub fn combine_text(path: &Path, main: String) -> Result<Combined, FileError> {
             }
             let local = |m: &str| {
                 let f = dir.join(format!("{}.py", m));
-                f.exists() && f != path
+                files.exists(&f) && f != path
             };
             match s {
                 AStmt::Import(i) => {
@@ -207,7 +240,7 @@ pub fn combine_text(path: &Path, main: String) -> Result<Combined, FileError> {
     let main = texts.remove(main_idx);
     let mut line = 1u32;
     for (p, t) in std::iter::once(main).chain(texts) {
-        let original = if p == path { main_text.clone() } else { std::fs::read_to_string(&p).unwrap_or_default() };
+        let original = if p == path { main_text.clone() } else { files.read(&p).unwrap_or_default() };
         out.parts.push((line, p, original));
         out.src += &t;
         if !t.ends_with('\n') {

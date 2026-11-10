@@ -24,13 +24,16 @@ export class Runner {
     });
   }
 
-  /** Compile (op "compile") or compile and run (op "run"); resolves with the "done" message. */
-  async request(op, src, { stdin = "", onOutput } = {}) {
+  /**
+   * Compile (op "compile") or compile and run (op "run") `project`, { main, files:
+   * { path: text } } (main and the modules it imports); resolves with the "done" message.
+   */
+  async request(op, project, { stdin = "", onOutput } = {}) {
     await this.ready;
     const id = ++this.seq;
     return new Promise((resolve) => {
       this.jobs.set(id, { resolve, onOutput });
-      this.worker.postMessage({ id, op, src, stdin });
+      this.worker.postMessage({ id, op, project, stdin });
     });
   }
 
@@ -47,9 +50,10 @@ export class Runner {
   }
 }
 
-/** The line numbers of a compile error: "line 3: …" or "geometry.py line 3: …" (null: main file only). */
-export function errorLines(message) {
-  const out = [];
-  for (const m of message.matchAll(/(?:^|\n)(?:(\S+\.py) )?line (\d+): ([^\n]*)/g)) out.push({ file: m[1] ?? null, line: +m[2], msg: m[3] });
-  return out;
+/** A compile error ({ file, line, msg, hint }) as text. */
+export function formatError(e) {
+  return `${e.line ? `${e.file} 第 ${e.line} 行` : e.file}：${e.msg}${e.hint ? `\n  提示：${e.hint}` : ""}`;
 }
+
+/** The message of an error's marker. */
+export const markerMessage = (e) => e.msg + (e.hint ? `\n提示：${e.hint}` : "");

@@ -2,20 +2,21 @@
 // host rupy_wasm.mjs, so a long or endless program never blocks the page: the
 // page stops it by terminating the worker (runner.mjs).
 //
-// in:  { id, op: "compile" | "run", src, stdin }
+// in:  { id, op: "compile" | "run", project: { main, files: { path: text } }, stdin }
 // out: { id, type: "ready" } once, then for a request
 //      { id, type: "out", fd, text } … and { id, type: "done", error?, code?, bytes, compileMs, runMs }
+//      (error: { file, line, msg, hint }, line 0 when it has none)
 import { run } from "./rupy/rupy_wasm.mjs";
 
 const compiler = (await WebAssembly.instantiateStreaming(fetch("./rupy/rupy.wasm"), {})).instance.exports;
 
-function compile(text) {
-  const bytes = new TextEncoder().encode(text);
+function compile(project) {
+  const bytes = new TextEncoder().encode(JSON.stringify(project));
   const p = compiler.alloc(bytes.length);
   new Uint8Array(compiler.memory.buffer, p, bytes.length).set(bytes);
-  const status = compiler.compile(p, bytes.length);
+  const status = compiler.compile_project(p, bytes.length);
   const out = new Uint8Array(compiler.memory.buffer, compiler.out_ptr(), compiler.out_len()).slice();
-  return status === 0 ? { wasm: out } : { error: new TextDecoder().decode(out) };
+  return status === 0 ? { wasm: out } : { error: JSON.parse(new TextDecoder().decode(out)) };
 }
 
 // The first 32 writes of every 50 ms are sent at once (so what a program printed
@@ -44,13 +45,13 @@ function writer(id, fd) {
   return { write, flush };
 }
 
-onmessage = async ({ data: { id, op, src, stdin } }) => {
+onmessage = async ({ data: { id, op, project, stdin } }) => {
   const t0 = performance.now();
   let r;
   try {
-    r = compile(src);
+    r = compile(project);
   } catch (e) {
-    r = { error: "the compiler failed: " + e };
+    r = { error: { file: project.main, line: 0, msg: "the compiler failed: " + e, hint: null } };
   }
   const t1 = performance.now();
   if (r.error || op === "compile") {

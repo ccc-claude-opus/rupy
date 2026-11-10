@@ -28,7 +28,7 @@
 | M1 | Monaco、檔案樹（IndexedDB）、執行與停止、輸出面板、打字時標出編譯錯誤 | ✓ |
 | M2 | Notebook：程式格與 Markdown 格（含 TeX）、前綴重跑、每格輸出、匯入匯出 `.ipynb` | ✓ |
 | M3 | 帳號（照 rucloud `examples/app-builder` 的 PBKDF2 + HMAC cookie）、自動存到 D1 + R2、唯讀分享連結 | ✓ |
-| M4 | 多檔專案：`examples/rupy_wasm.rs` 接受一組虛擬檔案（`import` 同專案的模組）、錯誤以 JSON 回傳行號與欄號 | |
+| M4 | 多檔專案：`examples/rupy_wasm.rs` 接受一組虛擬檔案（`import` 同專案的模組）、錯誤以 JSON 回傳檔案與行號（rupy 的錯誤沒有欄號） | ✓ |
 | M5 | 豐富輸出：在 `src/wasm/host.mjs` 加 `display()`，顯示 rstatistics graphics 的 SVG | |
 | M6 | Durable Objects 即時協作、AI 助手（Workers AI / AI Gateway） | |
 

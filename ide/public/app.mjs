@@ -5,8 +5,8 @@
 import { openFs, dbName, deleteFs } from "./fs.mjs";
 import { Sync, api } from "./sync.mjs";
 import { loadMonaco, darkQuery, themeName } from "./editor.mjs";
-import { Runner, errorLines } from "./runner.mjs";
-import { NotebookView } from "./notebook.mjs";
+import { Runner, formatError, markerMessage } from "./runner.mjs";
+import { NotebookView, lineMarker } from "./notebook.mjs";
 import { parseNotebook, serializeNotebook, newCell } from "./nbformat.mjs";
 import { EXAMPLES, NOTEBOOK } from "./examples.mjs";
 
@@ -170,6 +170,8 @@ async function openFile(path) {
       onChange: () => saveLater(path, () => v.text()),
       onEdit: () => scheduleCheck(),
       onRunRequest: (upto) => go(upto),
+      project: (src) => project(path + ".py", src), // the notebook's program, next to the modules
+      markOther,
     });
     try {
       v.load(f.text);
@@ -295,19 +297,49 @@ async function check() {
   if (view) return view.check(checker);
   const model = editor.getModel();
   if (!model) return;
-  const r = await checker.request("compile", model.getValue());
+  const main = current;
+  const r = await checker.request("compile", await project(main));
   if (seq !== checkSeq || r.stopped || model.isDisposed()) return;
-  monaco.editor.setModelMarkers(model, "rupy", markers(model, r.error));
+  showErrors(model, main, r.error);
 }
 
-function markers(model, error) {
-  if (!error) return [];
-  const found = errorLines(error).filter((e) => e.file === null);
-  if (!found.length) return [{ severity: monaco.MarkerSeverity.Error, message: error, startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 }];
-  return found.map(({ line, msg }) => {
-    const l = Math.min(Math.max(line, 1), model.getLineCount());
-    return { severity: monaco.MarkerSeverity.Error, message: msg, startLineNumber: l, startColumn: model.getLineFirstNonWhitespaceColumn(l) || 1, endLineNumber: l, endColumn: model.getLineMaxColumn(l) };
-  });
+/** The workspace's programs ({ path: text }), with the open editors' text. */
+async function projectFiles() {
+  const files = {};
+  for (const f of await fs.list()) if (f.path.endsWith(".py")) files[f.path] = f.text;
+  for (const [p, m] of models) if (!m.isDisposed()) files[p] = m.getValue();
+  return files;
+}
+
+/** What the compiler gets: `main` and every program of the workspace (the modules it may import). */
+async function project(main, text) {
+  const files = await projectFiles();
+  if (text !== undefined) files[main] = text;
+  return { main, files };
+}
+
+// an error in a module is marked in it too (when it has an editor model)
+let markedOther = null;
+function markOther(error) {
+  const old = markedOther && models.get(markedOther);
+  if (old && !old.isDisposed()) monaco.editor.setModelMarkers(old, "rupy", []);
+  markedOther = null;
+  const m = error?.line ? models.get(error.file) : null;
+  if (!m) return;
+  monaco.editor.setModelMarkers(m, "rupy", [lineMarker(monaco, m, error.line, markerMessage(error), monaco.MarkerSeverity.Error)]);
+  markedOther = error.file;
+}
+
+/** Mark the error of compiling `main` (shown in `model`; null: no error). */
+function showErrors(model, main, error) {
+  const here = error && error.file === main;
+  markOther(error && !here ? error : null);
+  const marks = !error
+    ? []
+    : here
+      ? [lineMarker(monaco, model, error.line, markerMessage(error), monaco.MarkerSeverity.Error)]
+      : [lineMarker(monaco, model, 1, `${error.file}${error.line ? ` 第 ${error.line} 行` : ""}有錯誤：${markerMessage(error)}`, monaco.MarkerSeverity.Warning)];
+  monaco.editor.setModelMarkers(model, "rupy", marks);
 }
 
 // -------------------------------------------------------------------- run
@@ -339,14 +371,15 @@ async function go(upto) {
     const model = editor.getModel();
     showPane("output");
     output.replaceChildren();
-    r = await runner.request("run", model.getValue(), {
+    const main = current;
+    r = await runner.request("run", await project(main), {
       stdin: stdin.value,
       onOutput: (fd, text) => append(text, fd === 2 ? "stderr" : ""),
     });
     if (r.stopped) append("\n[已停止]\n", "stderr");
     else if (r.error) {
-      append(r.error + "\n", "stderr");
-      monaco.editor.setModelMarkers(model, "rupy", markers(model, r.error));
+      append(formatError(r.error) + "\n", "stderr");
+      showErrors(model, main, r.error);
     }
   }
   runBtn.disabled = runAllBtn.disabled = false;
