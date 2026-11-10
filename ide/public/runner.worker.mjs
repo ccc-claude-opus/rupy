@@ -18,19 +18,28 @@ function compile(text) {
   return status === 0 ? { wasm: out } : { error: new TextDecoder().decode(out) };
 }
 
-// output is sent in batches: at most every 50 ms or 16 KB (a program runs
-// synchronously, so a timer would not fire until it ends)
+// The first 32 writes of every 50 ms are sent at once (so what a program printed
+// before it hangs is seen, and stopping it loses nothing); more are batched until
+// the next write after the 50 ms or 16 KB (a program runs synchronously, so a
+// timer would not fire until it ends).
 function writer(id, fd) {
   let buf = "";
-  let last = performance.now();
+  let since = 0, sent = 0;
   const flush = () => {
     if (buf) postMessage({ id, type: "out", fd, text: buf });
     buf = "";
-    last = performance.now();
   };
   const write = (s) => {
     buf += s;
-    if (buf.length > 16384 || performance.now() - last > 50) flush();
+    const now = performance.now();
+    if (now - since > 50) {
+      since = now;
+      sent = 0;
+    }
+    if (sent < 32 || buf.length > 16384 || now === since) {
+      sent++;
+      flush();
+    }
   };
   return { write, flush };
 }

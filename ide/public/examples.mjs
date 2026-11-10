@@ -98,3 +98,22 @@ ps = primes(200000)
 print(len(ps), ps[:10], ps[-3:])
 `,
 };
+
+// A notebook: text with TeX, and code cells that use the cells above them.
+export const NOTEBOOK = {
+  cells: [
+    {
+      type: "markdown",
+      source: `# rupy 筆記本
+
+程式格用 **Shift + Enter** 執行並到下一格，Ctrl/⌘ + Enter 只執行。執行第 $k$ 格時，第 $1..k$ 格會當成一支程式重新編譯執行，所以後面的格子看得到前面定義的變數和函式。
+
+文字格可以寫 TeX，例如 $\\sum_{i=1}^{n} i^2 = \\frac{n(n+1)(2n+1)}{6}$。點兩下編輯。`,
+    },
+    { type: "code", source: `def squares(n: int) -> list[int]:\n    return [i * i for i in range(1, n + 1)]\n` },
+    { type: "code", source: `n = 10\nxs = squares(n)\nprint(xs)\nprint(sum(xs), n * (n + 1) * (2 * n + 1) // 6)\n` },
+    { type: "markdown", source: "## NumPy\n\n$A$ 是 $3 \\times 4$ 的矩陣，$A^\\top A$ 是 $4 \\times 4$。" },
+    { type: "code", source: `import numpy as np\n\na = np.arange(12).reshape((3, 4))\nprint(a.T @ a)\n` },
+  ].map((c) => ({ ...c, outputs: [], count: null })),
+  metadata: {},
+};

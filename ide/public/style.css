@@ -52,3 +52,35 @@ textarea.pane { border: 0; resize: none; background: var(--panel); color: var(--
   .layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr 40%; }
   .sidebar { grid-row: auto; max-height: 120px; border-right: 0; border-bottom: 1px solid var(--line); }
 }
+
+[hidden] { display: none !important; }
+.toolbar .end { margin-left: auto; }
+#files li .icon { width: 14px; color: var(--muted); flex-shrink: 0; }
+
+/* notebooks */
+#notebook { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 48px; }
+.cell { border: 1px solid transparent; border-radius: 8px; margin: 0 auto; max-width: 980px; }
+.cell.active { border-color: var(--line); }
+.cell-row { display: flex; gap: 6px; padding: 4px 4px 4px 0; }
+.gutter { width: 44px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; padding-top: 4px; }
+.gutter button { width: 28px; height: 28px; padding: 0; border-radius: 50%; font-size: 11px; }
+.cell.running .gutter button { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.count { font: 11px var(--mono); color: var(--muted); }
+.body { flex: 1; min-width: 0; }
+.cell-editor { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.cell.queued .cell-editor { border-color: var(--muted); border-style: dashed; }
+.cell.running .cell-editor { border-color: var(--accent); }
+.cell-out { margin: 4px 0 0; padding: 6px 10px; font: 13px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; max-height: 480px; overflow: auto; }
+.cell-tools { display: flex; flex-direction: column; gap: 2px; visibility: hidden; }
+.cell.active .cell-tools, .cell:hover .cell-tools { visibility: visible; }
+.cell-tools button { border: 0; background: none; color: var(--muted); padding: 0 6px; }
+.md-view { padding: 2px 10px; cursor: text; overflow-x: auto; }
+.md-view > :first-child { margin-top: 0; }
+.md-view > :last-child { margin-bottom: 0; }
+.md-view pre, .md-view code { font-family: var(--mono); font-size: 13px; }
+.add-bar { display: flex; justify-content: center; gap: 8px; height: 22px; opacity: 0; transition: opacity .1s; }
+.add-bar:hover, .add-bar:focus-within, #notebook > .add-bar:only-child { opacity: 1; }
+.add-bar button { font-size: 12px; padding: 0 10px; }
+@media (hover: none) { .add-bar { opacity: 1; } .cell-tools { visibility: visible; } }
+.layout.nb { grid-template-rows: 1fr 96px; }
+@media (max-width: 760px) { .layout.nb { grid-template-rows: auto 1fr 80px; } }
