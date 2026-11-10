@@ -17,7 +17,7 @@
 
 * **程式在瀏覽器裡編譯與執行。** `rupy.wasm` 編譯，`rupy_wasm.mjs` 執行，都放在 Web Worker 裡，停止時結束 Worker。伺服器只負責靜態檔案、帳號、存檔與分享。
 * **Notebook 用前綴重跑。** rupy 整支程式一起編譯，沒有 REPL 狀態。執行第 $k$ 格時，把第 $1..k$ 格接成一支程式編譯執行；格與格之間插入標記，用來切開各格的輸出，錯誤行號依每格的起始行換算回各格。
-* **儲存（M3）。** D1 存使用者、專案、notebook 的基本資料；R2 存檔案內容與 `.ipynb`；KV 存登入狀態與分享連結；Durable Objects 留給 M6 的即時協作。前端先寫 IndexedDB，再同步到伺服器。
+* **儲存（M3）。** D1 存使用者、檔案的版本與分享連結；R2 存檔案內容與分享快照；Durable Objects 留給 M6 的即時協作。前端先寫 IndexedDB，再同步到伺服器。登入狀態用 HMAC 簽章的 cookie，不需要 KV。每個帳號是一個工作區（路徑可以有 `/`），還沒有多專案。
 * **格式。** Notebook 用 nbformat 4 的 `.ipynb`，可以和 Jupyter、Colab 互相匯入匯出。
 
 ## 里程碑
@@ -27,7 +27,7 @@
 | M0 | `ide/build.sh`、`rucloud dev ide`；在 Web Worker 執行，可停止 | ✓ |
 | M1 | Monaco、檔案樹（IndexedDB）、執行與停止、輸出面板、打字時標出編譯錯誤 | ✓ |
 | M2 | Notebook：程式格與 Markdown 格（含 TeX）、前綴重跑、每格輸出、匯入匯出 `.ipynb` | ✓ |
-| M3 | 帳號（照 rucloud `examples/app-builder` 的 PBKDF2 + HMAC cookie）、自動存到 D1 + R2、唯讀分享連結 | |
+| M3 | 帳號（照 rucloud `examples/app-builder` 的 PBKDF2 + HMAC cookie）、自動存到 D1 + R2、唯讀分享連結 | ✓ |
 | M4 | 多檔專案：`examples/rupy_wasm.rs` 接受一組虛擬檔案（`import` 同專案的模組）、錯誤以 JSON 回傳行號與欄號 | |
 | M5 | 豐富輸出：在 `src/wasm/host.mjs` 加 `display()`，顯示 rstatistics graphics 的 SVG | |
 | M6 | Durable Objects 即時協作、AI 助手（Workers AI / AI Gateway） | |

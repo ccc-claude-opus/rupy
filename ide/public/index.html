@@ -15,6 +15,8 @@
   <button id="stop" disabled title="停止執行">■ 停止</button>
   <span class="status" id="status">載入編譯器中…</span>
   <button id="download" class="end" title="下載目前的檔案">下載</button>
+  <span class="sync" id="sync" aria-live="polite"></span>
+  <button id="account" hidden title="帳號">登入</button>
 </header>
 <main class="layout">
   <nav class="sidebar" aria-label="檔案">
@@ -45,6 +47,31 @@
     <textarea id="stdin" class="pane" hidden spellcheck="false" placeholder="input() 從這裡一行一行讀"></textarea>
   </section>
 </main>
+<dialog id="login-dialog" aria-labelledby="login-title">
+  <form id="login-form">
+    <h2 id="login-title">登入</h2>
+    <p class="muted">登入後檔案會存到伺服器，換電腦也看得到，還可以分享唯讀連結。</p>
+    <label>Email <input type="email" name="email" required autocomplete="username"></label>
+    <label>密碼（至少 8 個字） <input type="password" name="password" required minlength="8" autocomplete="current-password"></label>
+    <p class="error" id="login-error" role="alert"></p>
+    <div class="row">
+      <button value="cancel" formnovalidate>取消</button>
+      <span class="spacer"></span>
+      <button value="register">註冊新帳號</button>
+      <button class="run" value="login">登入</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="account-dialog" aria-labelledby="account-email">
+  <h2 id="account-email"></h2>
+  <h3>我的分享連結</h3>
+  <ul id="share-list" class="share-list"></ul>
+  <div class="row">
+    <button id="logout">登出</button>
+    <span class="spacer"></span>
+    <button id="account-close" class="run">關閉</button>
+  </div>
+</dialog>
 <script type="module" src="app.mjs"></script>
 </body>
 </html>

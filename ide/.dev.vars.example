@@ -1,0 +1,2 @@
+# 複製成 .dev.vars（不進版控）並換成隨機長字串，例如 openssl rand -hex 32 的結果
+AUTH_SECRET=請換成隨機長字串

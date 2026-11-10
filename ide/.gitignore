@@ -3,3 +3,4 @@ public/rupy/
 # rucloud / wrangler state
 .rucloud/
 .wrangler/
+.dev.vars
