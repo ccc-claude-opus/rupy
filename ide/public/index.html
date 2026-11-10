@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rupy IDE</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="toolbar">
+  <span class="brand">rupy IDE</span>
+  <button class="run" id="run" disabled title="執行（Ctrl/⌘ + Enter）">▶ 執行</button>
+  <button id="stop" disabled title="停止執行">■ 停止</button>
+  <span class="status" id="status">載入編譯器中…</span>
+</header>
+<main class="layout">
+  <nav class="sidebar" aria-label="檔案">
+    <div class="side-head">
+      <span>檔案</span>
+      <button id="new-file" title="新增檔案" aria-label="新增檔案">＋</button>
+    </div>
+    <ul id="files"></ul>
+    <p class="note" id="storage-note"></p>
+  </nav>
+  <section class="editor-wrap">
+    <div class="tab" id="current">—</div>
+    <div id="editor"></div>
+  </section>
+  <section class="panel">
+    <div class="panel-tabs" role="tablist">
+      <button role="tab" class="active" data-pane="output" aria-selected="true">輸出</button>
+      <button role="tab" data-pane="stdin" aria-selected="false">標準輸入</button>
+      <span class="spacer"></span>
+      <button id="clear" title="清除輸出">清除</button>
+    </div>
+    <pre id="output" class="pane" aria-live="polite"></pre>
+    <textarea id="stdin" class="pane" hidden spellcheck="false" placeholder="input() 從這裡一行一行讀"></textarea>
+  </section>
+</main>
+<script type="module" src="app.mjs"></script>
+</body>
+</html>

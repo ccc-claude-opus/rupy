@@ -1,0 +1,5 @@
+# built by build.sh
+public/rupy/
+# rucloud / wrangler state
+.rucloud/
+.wrangler/

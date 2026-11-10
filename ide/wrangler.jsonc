@@ -1,0 +1,8 @@
+// rupy IDE：在瀏覽器裡編譯並執行 rupy（rupy.wasm），伺服器只放靜態檔案與 /api（M3 起存檔）
+// sh ide/build.sh && rucloud dev ide
+{
+  "name": "rupy-ide",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-11-01",
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": ["/api/*"] }
+}
