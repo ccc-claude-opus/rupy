@@ -8,11 +8,12 @@ version = "0.4.0"
 description = "R's probability and statistics functions in pure Python: d/p/q/r distributions, the tests of the stats package, summary, quantile, with R's numbers and R's printed output"
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 dependencies = []
 keywords = ["statistics", "probability", "R", "distributions", "hypothesis-testing"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Mathematics",

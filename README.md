@@ -148,7 +148,8 @@ name are overloads, `@rust("...")` gives a Rust path or an expression template, 
   `table`, `summary`, `quantile`, ...), printed as R prints them, and the plots of R's
   graphics (`graphics()` opens a device that writes SVG with R's layout: `hist`,
   `density`, `boxplot`, `qqnorm`, `ecdf`, `curve`, `barplot`, `plot`). Unlike the packages above it is written in
-  rupy itself (`rstatistics/`, also on PyPI as pure Python: `pip install rstatistics`): rupy compiles its source with the
+  rupy itself (`rstatistics/`, also on PyPI as pure Python: `pip install rstatistics`,
+  which needs Python 3.13 or newer for `math.fma`): rupy compiles its source with the
   program, so it runs on the Rust and the wasm backends alike. See
   [rstatistics/README.md](rstatistics/README.md).
 

@@ -2,6 +2,7 @@
 
 R's probability and statistics functions in pure Python, with R's numbers and R's
 printed output. There are no dependencies: vectors are plain `list[float]`.
+Python 3.13 or newer is needed (`math.fma`, which R's generators use).
 
 ```
 pip install rstatistics

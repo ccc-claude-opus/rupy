@@ -16,6 +16,8 @@
   `barplot`); the numbers of the plots come from the calculation layer (`pretty`,
   `hist_stats`, `density_stats`, `ecdf`, `boxplot_stats`, `ppoints`), which agrees with R
   to a relative 1e-12.
+- **rstatistics** needs Python 3.13 or newer (`math.fma`, which R's generators use to get
+  R's numbers to the last bit); `pip install rstatistics` refuses the older versions.
 - **rstatistics 0.3.0**: the linear models of R's stats package: `lm` fits a model with the
   Householder QR of R's `lm.fit` (the column pivoting of `dqrdc2` included, so a rank
   deficient fit drops the collinear coefficients as R does) and the summary of the fit
