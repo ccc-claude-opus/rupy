@@ -224,9 +224,15 @@ correctly rounded, so a result can differ from CPython's in the last bit (`math.
 is `1.0986122886681096`, not `...098`). A corpus program that shows it is marked
 `# wasm: skip (reason)`, and `rupy test --wasm` counts it with the unsupported ones.
 
+Text files work: `open()` reads and writes the host's `io.files` (anything with
+`get(path)` and `set(path, text)`, such as a `Map`; under Node.js, the disk), so a
+browser page can hand a program its files and get back the ones it wrote. The
+[rupy IDE](ide/README.md) uses this: `open("data.csv")` reads the workspace, and
+rstatistics' `g.save("hist.svg")` writes a file into it.
+
 Not yet supported by the wasm backend: generators, functions as values (lambdas work as
-`key=` arguments), `nonlocal`, files, `re`, `heapq`, `itertools`, `random`, exception
-fields, and `ruai.plot`.
+`key=` arguments), `nonlocal`, `re`, `heapq`, `itertools`, `random`, exception fields,
+and `ruai.plot`.
 
 ## Rust crates
 

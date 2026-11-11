@@ -113,6 +113,16 @@ def keep(xs: Own[list[int]]) -> None: ...           # Vec<i64>
 
 程式碼和標註矛盾時（例如修改 `Ref[...]`）會報錯。
 
+## WebAssembly
+
+`rupy wasm FILE.py [-o OUT.wasm]` 不經過 Rust，直接把程式編譯成 WebAssembly：一個 WasmGC 模組（物件、list、dict、set、tuple、字串用 GC 的 struct 與 array；Python 的例外用 wasm 例外），加上執行它的 JavaScript 主機 `rupy_wasm.mjs`，可以在瀏覽器（`run(bytes, {stdout, stderr, stdin})`）或 Node.js 22 以上（`node rupy_wasm.mjs OUT.wasm`）執行。`rupy wasm --run FILE.py` 編譯後直接執行，`rupy test --wasm` 把能編譯的程式和 CPython 對照。
+
+編譯器本身也能編成 `wasm32-unknown-unknown`（`examples/rupy_wasm.rs`），所以 `web/` 的 playground 與 [rupy IDE](ide/README.md) 都在瀏覽器裡編譯 rupy。用 Rust 實作的套件（numpy、sklearn 等）放在另一個模組 `rupy_lib.wasm`，程式需要時才載入。
+
+文字檔可以用：`open()` 讀寫主機的 `io.files`（任何有 `get(path)` 與 `set(path, text)` 的物件，例如 `Map`；Node.js 下直接讀寫磁碟），所以網頁可以把檔案交給程式，再拿回它寫出的檔案。rupy IDE 就是這樣：`open("data.csv")` 讀工作區的檔案，rstatistics 的 `g.save("hist.svg")` 把圖存進工作區。
+
+wasm 後端還不支援：generator、把函式當值傳遞（lambda 當 `key=` 參數可以）、`nonlocal`、`re`、`heapq`、`itertools`、`random`、例外的自訂欄位，以及 `ruai.plot`。`log`、`exp` 等超越函數用 JavaScript 的 `Math`，結果的最後一位可能和 CPython 不同。
+
 ## Rust crate
 
 `from rust.CRATE import Name` 使用 Rust crate。宣告來自 stub 檔 `CRATE.pyi`，依序在
