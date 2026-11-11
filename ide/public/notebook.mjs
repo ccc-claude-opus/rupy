@@ -267,6 +267,23 @@ export class NotebookView {
 
   // ---------------------------------------------------------------- run
 
+  // ------------------------------------------------- the AI assistant's cell
+
+  /** The active code cell: { index, editor, source, before (the code cells above it) }, or null. */
+  activeCode() {
+    const item = this.active;
+    if (!item || item.cell.type !== "code") return null;
+    const index = this.index(item);
+    const before = this.nb.cells.slice(0, index).filter((c) => c.type === "code").map((c) => c.source.replace(/\n+$/, ""));
+    return { index, editor: item.editor, source: item.cell.source, before: before.join("\n\n") };
+  }
+
+  /** The program of cells 0..index with cell `index` replaced by `source` ({ src, starts }). */
+  programWith(index, source) {
+    const cells = this.nb.cells.map((c, i) => (i === index ? { ...c, source } : c));
+    return buildProgram(cells, index);
+  }
+
   /** The index to run for the toolbar's Run: the active cell, or the last cell. */
   activeIndex() {
     return this.active ? this.index(this.active) : this.items.length - 1;
@@ -317,7 +334,10 @@ export class NotebookView {
       this.showOutputs(it);
     }
     this.opts.onChange();
-    return { ...r, cells: started.length };
+    // the error, as text (for the AI assistant): the compile error, or what the cells wrote to stderr
+    const stderr = ran.flatMap((i) => this.nb.cells[i].outputs.filter((o) => o.name === "stderr").map((o) => o.text)).join("");
+    const errorText = r.error ? this.errorText(r.error, starts, project.main) : r.code ? stderr : null;
+    return { ...r, cells: started.length, errorText };
   }
 
   /** Where an error is: { cell, line } in this notebook, or null (another file, or no line). */
@@ -334,15 +354,24 @@ export class NotebookView {
 
   // ---------------------------------------------------- errors as you type
 
-  /** Compile every code cell with `checker`; mark the errors in their cells. */
+  /** Compile every code cell with `checker`; mark the errors in their cells. Resolves with the error's text (null: none), or false when stopped. */
   async check(checker) {
     const { src, starts } = buildProgram(this.nb.cells);
     const project = await this.opts.project(src);
     const r = await checker.request("compile", project);
     if (r.stopped || !this.items.length) return false;
     this.setMarkers(r.error, starts, project.main);
-    return true;
+    return r.error ? this.errorText(r.error, starts, project.main) : null;
   }
+
+  /** A compile error as text, by cell ("第 2 格第 3 行：…"). */
+  errorText(error, starts, main) {
+    const at = this.where(error, starts, main);
+    const hint = error.hint ? `\n  提示：${error.hint}` : "";
+    if (at) return `第 ${at.cell + 1} 格第 ${at.line} 行：${error.msg}${hint}`;
+    return formatError(error.file === main ? { ...error, file: "筆記本" } : error);
+  }
+
 
   /** Mark `error` (null: none) in its cell; an error in another file is marked
    *  there (opts.markOther) and, as a warning, on the first code cell. */

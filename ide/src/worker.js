@@ -4,11 +4,14 @@
 //   /api/files[/<path>]                               the account's files (list, get, put, delete)
 //   /api/shares[/<id>]                                share links of the account (create, list, delete)
 //   /api/s/<id>                                       a shared file (public)
+//   /api/ai/chat                                      the AI assistant (a stream of server-sent events)
 //   /s/<id>                                           the share page (public/share.html)
 // Files: a row in D1 (path, version, size, mtime, obj) and the text in R2 under
 // obj = u/<user>/<random>, a new object for every write; a PUT names the version
 // it is based on (If-Match) and gets 409 when the file changed in between. Shares are snapshots in R2 (s/<id>).
 // AUTH_SECRET (.dev.vars) signs the cookie; without it there are no accounts.
+// The AI assistant: AI_BASE_URL, AI_MODEL, AI_API_KEY (an OpenAI-compatible API),
+// or else a Workers AI binding (env.AI); AI_DAILY_LIMIT requests a day per account.
 
 const COOKIE = "rupy_session";
 const SESSION_DAYS = 30;
@@ -203,6 +206,145 @@ async function getShare(env, db, id) {
   return json({ id, path: row.path, created_at: row.created_at, text: await obj.text() });
 }
 
+// ------------------------------------------------------------------- AI
+
+const AI_MAX_BODY = 128 << 10;
+const AI_MAX_MESSAGES = 20;
+const aiEnabled = (env) => !!(env.AI_BASE_URL || env.AI);
+
+const SYSTEM_PROMPT = `你是 rupy IDE 裡的程式助手，用繁體中文回答，簡短直接。
+
+rupy 把有型別標註的 Python 子集編譯成 WebAssembly，在瀏覽器裡執行；同一支程式在 CPython 下輸出必須相同。寫給 rupy 的程式要遵守：
+- 函式的參數與回傳值都要標型別（def f(xs: list[float], k: int = 3) -> float:）；空的 list、dict 要標型別（xs: list[int] = []）。
+- 型別：int（64 位元）、float、bool、str、list、dict、set、tuple、X | None。一個變數只能有一種型別，list 的元素型別要一致。
+- 可以用：dataclass、類別（單一繼承、property、運算子方法）、例外與 try/finally、comprehension、f-string、match、with open(...)（文字檔）、lambda 當 key= 參數、math、collections（Counter、defaultdict）、bisect、functools、sys、time、json.dumps、os.path。
+- 瀏覽器（wasm）還不支援：generator（yield）、把函式當值傳遞、nonlocal、re、heapq、itertools、random、例外的自訂欄位、ruai.plot。需要時改寫，例如 generator 改成回傳 list。
+- 頂層變數是常數，不能在函式裡重新指定；需要可變的狀態就用類別或傳參數。被 import 的模組只能定義函式、類別和常數。
+- 套件：numpy（陣列、linalg、random.default_rng）、rstatistics（R 風格統計：mean、sd、t_test、lm、density 等；繪圖 g = rstatistics.Graphics(7.0, 7.0)，g.hist(x, main=..., xlab=..., ylab=...)、g.plot(x, y, ...)、g.boxplot、g.qqnorm，print(g.svg()) 會在 IDE 顯示成圖，g.save("a.svg") 存檔）。
+- 工作區的檔案可以 import（同資料夾的 .py）或用 open() 讀。
+
+回答程式問題時：
+- 要給修改後的程式，就在一個 \`\`\`python 區塊裡給「完整」的內容（整個檔案；若問的是筆記本的一格，就只給那一格的完整內容），不要只給片段，也不要給好幾個 python 區塊。
+- 先用一兩句話說明問題出在哪、怎麼改。`;
+
+/** The day's request count of a user, after counting this one (429 over the limit). */
+async function countAiRequest(env, db, userId) {
+  const day = now().slice(0, 10);
+  const limit = Number(env.AI_DAILY_LIMIT) || 100;
+  const row = await db
+    .prepare("INSERT INTO ai_usage (user_id, day, requests) VALUES (?, ?, 1) ON CONFLICT (user_id, day) DO UPDATE SET requests = requests + 1 RETURNING requests")
+    .bind(userId, day)
+    .first();
+  if (row.requests > limit) throw new HttpError(429, `今天的 AI 額度（${limit} 次）用完了，明天再試`);
+}
+
+/** The messages for the model: the system prompt, the context (the file, the error) and the conversation. */
+function aiMessages(body) {
+  const msgs = Array.isArray(body.messages) ? body.messages.slice(-AI_MAX_MESSAGES) : [];
+  const conv = msgs
+    .filter((m) => (m?.role === "user" || m?.role === "assistant") && typeof m.content === "string")
+    .map((m) => ({ role: m.role, content: m.content }));
+  if (!conv.length || conv[conv.length - 1].role !== "user") throw new HttpError(400, "沒有問題");
+  const c = body.context ?? {};
+  let ctx = "";
+  if (typeof c.path === "string" && typeof c.text === "string") {
+    ctx += c.cell
+      ? `使用者正在看筆記本 ${c.path} 的一格。它上面的程式格（會先執行）：\n\`\`\`python\n${String(c.before ?? "")}\n\`\`\`\n這一格：\n\`\`\`python\n${c.text}\n\`\`\`\n`
+      : `使用者正在編輯 ${c.path}：\n\`\`\`python\n${c.text}\n\`\`\`\n`;
+  }
+  if (typeof c.error === "string" && c.error) ctx += `最近一次編譯或執行的錯誤：\n\`\`\`\n${c.error}\n\`\`\`\n`;
+  if (Array.isArray(c.files) && c.files.length) ctx += `工作區的其他檔案：${c.files.filter((f) => typeof f === "string").slice(0, 50).join("、")}\n`;
+  const system = SYSTEM_PROMPT + (ctx ? "\n\n目前的情況：\n" + ctx : "");
+  return [{ role: "system", content: system }, ...conv];
+}
+
+/** Server-sent events of the reply: {"d": text} …, {"e": error} on failure, then [DONE]. */
+async function aiChat(request, env, db, userId) {
+  if (!aiEnabled(env)) throw new HttpError(503, "伺服器沒有設定 AI");
+  const raw = await request.text();
+  if (raw.length > AI_MAX_BODY) throw new HttpError(413, "內容太長（檔案太大或對話太長）");
+  let body;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    throw new HttpError(400, "格式不對");
+  }
+  const messages = aiMessages(body);
+  await countAiRequest(env, db, userId);
+
+  const { readable, writable } = new TransformStream();
+  const out = writable.getWriter();
+  const send = (obj) => out.write(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
+  (async () => {
+    try {
+      if (env.AI_BASE_URL) await streamOpenAI(env, messages, send);
+      else await streamWorkersAI(env, messages, send);
+    } catch (e) {
+      await send({ e: "AI 連線失敗：" + e.message });
+    }
+    await out.write(enc.encode("data: [DONE]\n\n"));
+    await out.close();
+  })();
+  return new Response(readable, { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" } });
+}
+
+/** The data lines of a server-sent event stream, as they arrive. */
+async function* sseData(body) {
+  const reader = body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      if (line.startsWith("data:")) yield line.slice(5).trim();
+    }
+  }
+}
+
+async function streamOpenAI(env, messages, send) {
+  const res = await fetch(env.AI_BASE_URL.replace(/\/+$/, "") + "/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(env.AI_API_KEY && { Authorization: "Bearer " + env.AI_API_KEY }) },
+    body: JSON.stringify({ model: env.AI_MODEL, messages, stream: true, temperature: 0.2 }),
+  });
+  if (!res.ok) return send({ e: `AI 服務回應 ${res.status}：${(await res.text()).slice(0, 300)}` });
+  if (!(res.headers.get("content-type") ?? "").includes("event-stream")) {
+    const j = await res.json();
+    const text = j.choices?.[0]?.message?.content;
+    return send(text ? { d: text } : { e: "AI 沒有回傳內容" });
+  }
+  for await (const data of sseData(res.body)) {
+    if (data === "[DONE]") break;
+    let j;
+    try {
+      j = JSON.parse(data);
+    } catch {
+      continue;
+    }
+    if (j.error) return send({ e: j.error.message ?? String(j.error) });
+    const delta = j.choices?.[0]?.delta;
+    // a reasoning model's thinking, shown folded
+    if (delta?.reasoning_content) await send({ r: delta.reasoning_content });
+    if (delta?.content) await send({ d: delta.content });
+  }
+}
+
+async function streamWorkersAI(env, messages, send) {
+  const stream = await env.AI.run(env.AI_MODEL || "@cf/meta/llama-3.1-8b-instruct", { messages, stream: true });
+  for await (const data of sseData(stream)) {
+    if (data === "[DONE]") break;
+    try {
+      const j = JSON.parse(data);
+      if (j.response) await send({ d: j.response });
+    } catch {}
+  }
+}
+
 // --------------------------------------------------------------- schema
 
 let schemaReady = false;
@@ -229,6 +371,11 @@ async function ensureSchema(db) {
       path TEXT NOT NULL,
       created_at TEXT NOT NULL)`),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_shares_user ON shares (user_id, created_at)"),
+    db.prepare(`CREATE TABLE IF NOT EXISTS ai_usage (
+      user_id INTEGER NOT NULL,
+      day TEXT NOT NULL,
+      requests INTEGER NOT NULL,
+      PRIMARY KEY (user_id, day))`),
   ]);
   schemaReady = true;
 }
@@ -252,10 +399,10 @@ async function route(request, env, url) {
   }
 
   if (p === "/api/me" && method === "GET") {
-    if (!env.AUTH_SECRET) return json({ accounts: false, user: null });
+    if (!env.AUTH_SECRET) return json({ accounts: false, user: null, ai: false });
     const id = await currentUserId(request, env);
     const user = id && (await db.prepare("SELECT id, email FROM users WHERE id = ?").bind(id).first());
-    return json({ accounts: true, user: user ?? null });
+    return json({ accounts: true, user: user ?? null, ai: aiEnabled(env) });
   }
   if (!env.AUTH_SECRET) throw new HttpError(503, "伺服器沒有設定 AUTH_SECRET，不能使用帳號");
   if (p === "/api/register" && method === "POST") return register(request, env, db);
@@ -275,6 +422,7 @@ async function route(request, env, url) {
   if (p === "/api/shares" && method === "GET") return listShares(db, userId);
   if (p === "/api/shares" && method === "POST") return createShare(request, env, db, userId);
   if ((m = p.match(/^\/api\/shares\/([0-9a-f]+)$/)) && method === "DELETE") return deleteShare(env, db, userId, m[1]);
+  if (p === "/api/ai/chat" && method === "POST") return aiChat(request, env, db, userId);
   throw new HttpError(404, "not found");
 }
 

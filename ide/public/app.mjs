@@ -10,6 +10,7 @@ import { NotebookView, lineMarker } from "./notebook.mjs";
 import { parseNotebook, serializeNotebook, newCell } from "./nbformat.mjs";
 import { EXAMPLES, NOTEBOOK } from "./examples.mjs";
 import { richSplitter, outputNode } from "./rich.mjs";
+import { AiPanel } from "./ai.mjs";
 
 const $ = (id) => document.getElementById(id);
 const runBtn = $("run"), runAllBtn = $("run-all"), stopBtn = $("stop"), status = $("status"), output = $("output"), stdin = $("stdin");
@@ -31,7 +32,7 @@ const store = {
 };
 
 // the account: { accounts: whether the server has them, user: { id, email } | null }
-let me = { accounts: false, user: null };
+let me = { accounts: false, user: null, ai: false };
 try {
   me = (await api("/api/me")).data;
 } catch {}
@@ -70,6 +71,7 @@ const models = new Map(); // path → model of a program file
 let applyingRemote = false; // a model takes the server's text: not an edit
 let current = null;
 let view = null; // the NotebookView when a notebook is open
+let ai = null; // the AiPanel, once it is opened
 
 // saving waits 400 ms after the last change; switching files saves at once
 let pendingSave = null;
@@ -194,6 +196,8 @@ async function openFile(path) {
   } else {
     editor.setModel(modelFor(path, f.text));
   }
+  setError("open", null);
+  ai?.show();
   viewToggle.hidden = !isSvg(path);
   viewToggle.textContent = svgSource ? "看圖" : "原始碼";
   runBtn.disabled = runner.busy || !runnable(path);
@@ -314,13 +318,26 @@ function scheduleCheck(delay = 600) {
 async function check() {
   const seq = ++checkSeq;
   if (checker.busy) checker.stop(); // a compile that takes too long: start over
-  if (view) return view.check(checker);
+  if (view) {
+    const v = view, e = await v.check(checker);
+    if (e !== false && v === view) setError("check", e);
+    return;
+  }
   const model = editor.getModel();
-  if (!model || !current?.endsWith(".py")) return;
+  if (!model || !current?.endsWith(".py")) return setError("check", null);
   const main = current;
   const r = await checker.request("compile", await project(main));
   if (seq !== checkSeq || r.stopped || model.isDisposed()) return;
   showErrors(model, main, r.error);
+  setError("check", r.error && formatError(r.error));
+}
+
+// the last error of the open file (compiling as you type, or running): what "AI 修正" sends
+let lastError = null, lastErrorFrom = null;
+function setError(from, text) {
+  if (text) [lastError, lastErrorFrom] = [text, from];
+  else if (lastErrorFrom === from || from === "open") lastError = lastErrorFrom = null;
+  $("ai-fix").hidden = !(lastError && me.ai && user);
 }
 
 /** The workspace's files ({ path: text }: modules to import, data to open()), with the open editors' text. */
@@ -417,6 +434,7 @@ async function go(upto) {
   let r;
   if (view) {
     r = await view.run(typeof upto === "number" ? upto : view.activeIndex());
+    if (!r.stopped) setError("run", r.errorText);
   } else {
     const model = editor.getModel();
     showPane("output");
@@ -424,9 +442,10 @@ async function go(upto) {
     const main = current;
     // an SVG document printed is shown as a picture
     const rich = richSplitter((kind, s) => (kind === "svg" ? output.append(outputNode({ name: "svg", text: s })) : append(s)));
+    let stderr = "";
     r = await runner.request("run", await project(main), {
       stdin: stdin.value,
-      onOutput: (fd, text) => (fd === 2 ? append(text, "stderr") : rich.feed(text)),
+      onOutput: (fd, text) => (fd === 2 ? (append(text, "stderr"), (stderr += text)) : rich.feed(text)),
       onFile: (p, text) => written.set(p, text),
     });
     rich.flush();
@@ -435,6 +454,7 @@ async function go(upto) {
       append(formatError(r.error) + "\n", "stderr");
       showErrors(model, main, r.error);
     }
+    if (!r.stopped) setError("run", r.error ? formatError(r.error) : r.code ? stderr.slice(-4000) : null);
   }
   const saved = await saveWritten(written);
   written = null;
@@ -471,6 +491,100 @@ stdin.oninput = () => store.set("stdin", stdin.value);
 addEventListener("beforeunload", () => {
   if (pendingSave) flushSave();
 });
+
+// ------------------------------------------------------------- AI assistant
+
+const aiPanel = $("ai-panel"), aiToggle = $("ai-toggle");
+aiToggle.hidden = !me.ai;
+let verifier = null; // a third compiler worker: the AI's code is compiled there
+
+/** The code `code` in place of the open file (or the notebook's active cell): its compile error as text, or null. */
+async function verifyCode(code) {
+  verifier ??= new Runner();
+  if (view) {
+    const cell = view.activeCode();
+    if (!cell) return null;
+    const { src, starts } = view.programWith(cell.index, code);
+    const proj = await project(current + ".py", src);
+    const r = await verifier.request("compile", proj);
+    return r.error ? view.errorText(r.error, starts, proj.main) : null;
+  }
+  const r = await verifier.request("compile", await project(current, code));
+  return r.error ? formatError(r.error) : null;
+}
+
+/** The editor the AI's code goes into: the open program's, or the notebook's active code cell's. */
+function aiTarget() {
+  if (view) return view.activeCode()?.editor ?? null;
+  return current?.endsWith(".py") ? editor : null;
+}
+
+let diffEditor = null;
+function showDiff(original, modified) {
+  const dialog = $("diff-dialog");
+  diffEditor ??= monaco.editor.createDiffEditor($("diff"), { readOnly: true, automaticLayout: true, minimap: { enabled: false }, scrollBeyondLastLine: false, fontSize: 13 });
+  const models = { original: monaco.editor.createModel(original, "python"), modified: monaco.editor.createModel(modified, "python") };
+  diffEditor.setModel(models);
+  dialog.showModal();
+  return new Promise((resolve) => {
+    const done = (ok) => {
+      dialog.close();
+      diffEditor.setModel(null);
+      models.original.dispose();
+      models.modified.dispose();
+      resolve(ok);
+    };
+    $("diff-apply").onclick = () => done(true);
+    $("diff-cancel").onclick = () => done(false);
+    dialog.oncancel = () => done(false);
+  });
+}
+
+async function openAi() {
+  if (!ai) {
+    const { renderMarkdown } = await import("./markdown.mjs");
+    ai = new AiPanel(aiPanel, {
+      key: () => current,
+      enabled: () => (!user ? "AI 助手要登入後才能用（右上角「登入」）。" : !current ? "先開一個檔案。" : !aiTarget() && !isNotebook(current) ? "AI 助手用在 .py 程式和筆記本。" : null),
+      render: renderMarkdown,
+      context: async () => {
+        const files = (await fs.list()).map((f) => f.path).filter((p) => p !== current);
+        const cell = view?.activeCode();
+        if (view) return cell ? { path: current, cell: true, text: cell.source, before: cell.before, error: lastError, files } : { path: current, cell: true, text: "", error: lastError, files };
+        return { path: current, text: editor.getValue(), error: lastError, files };
+      },
+      verify: verifyCode,
+      original: () => aiTarget()?.getValue() ?? "",
+      apply: (code) => {
+        const ed = aiTarget();
+        if (!ed) return;
+        ed.pushUndoStop();
+        ed.executeEdits("ai", [{ range: ed.getModel().getFullModelRange(), text: code }]);
+        ed.pushUndoStop();
+        ed.focus();
+      },
+      showDiff,
+    });
+  }
+  aiPanel.hidden = false;
+  document.querySelector(".layout").classList.add("ai-open");
+  aiToggle.setAttribute("aria-pressed", "true");
+  ai.show();
+  return ai;
+}
+
+function closeAi() {
+  aiPanel.hidden = true;
+  document.querySelector(".layout").classList.remove("ai-open");
+  aiToggle.setAttribute("aria-pressed", "false");
+}
+
+aiToggle.onclick = () => (aiPanel.hidden ? openAi() : closeAi());
+aiPanel.querySelector(".ai-close").onclick = closeAi;
+$("ai-fix").onclick = async () => {
+  const panel = await openAi();
+  panel.ask(view ? "這一格（或它上面的格子）有錯誤，請解釋原因並修正這一格。" : "這個程式有錯誤，請解釋原因並修正。");
+};
 
 // ---------------------------------------------------------------- account
 

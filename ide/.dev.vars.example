@@ -1,2 +1,9 @@
 # 複製成 .dev.vars（不進版控）並換成隨機長字串，例如 openssl rand -hex 32 的結果
 AUTH_SECRET=請換成隨機長字串
+
+# AI 助手（選填）：OpenAI 相容的 API。沒有設定就不提供 AI。
+# AI_BASE_URL=https://api.minimaxi.com/v1
+# AI_MODEL=MiniMax-M3.1-Flash
+# AI_API_KEY=你的金鑰
+# 每個帳號每天可以問幾次（預設 100）
+# AI_DAILY_LIMIT=100

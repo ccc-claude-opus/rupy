@@ -14,7 +14,9 @@
   <button id="run-all" hidden disabled title="執行所有程式格">▶▶ 全部執行</button>
   <button id="stop" disabled title="停止執行">■ 停止</button>
   <span class="status" id="status">載入編譯器中…</span>
+  <button id="ai-fix" hidden title="請 AI 解釋並修正這個錯誤">✦ AI 修正</button>
   <button id="download" class="end" title="下載目前的檔案">下載</button>
+  <button id="ai-toggle" hidden title="AI 助手" aria-pressed="false">✦ AI</button>
   <span class="sync" id="sync" aria-live="polite"></span>
   <button id="account" hidden title="帳號">登入</button>
 </header>
@@ -47,6 +49,19 @@
     <pre id="output" class="pane" aria-live="polite"></pre>
     <textarea id="stdin" class="pane" hidden spellcheck="false" placeholder="input() 從這裡一行一行讀"></textarea>
   </section>
+  <aside id="ai-panel" class="ai-panel" hidden aria-label="AI 助手">
+    <div class="ai-head">
+      <span class="ai-title">AI 助手</span>
+      <span class="ai-ctx"></span>
+      <button class="ai-new" title="清掉這個檔案的對話">新對話</button>
+      <button class="ai-close" title="關閉" aria-label="關閉">✕</button>
+    </div>
+    <div class="ai-log" aria-live="polite"></div>
+    <form class="ai-form">
+      <textarea rows="3" placeholder="例如：為什麼編譯不過？把它改成 rupy 能跑的寫法（Enter 送出，Shift + Enter 換行）"></textarea>
+      <div class="row"><span class="muted">AI 可能出錯，套用前請看差異。</span><span class="spacer"></span><button class="ai-send run">送出</button></div>
+    </form>
+  </aside>
 </main>
 <dialog id="login-dialog" aria-labelledby="login-title">
   <form id="login-form">
@@ -62,6 +77,15 @@
       <button class="run" value="login">登入</button>
     </div>
   </form>
+</dialog>
+<dialog id="diff-dialog" class="diff-dialog" aria-label="AI 的修改">
+  <h2>AI 的修改 <span class="muted">（左：目前，右：AI）</span></h2>
+  <div id="diff"></div>
+  <div class="row">
+    <span class="spacer"></span>
+    <button id="diff-cancel">取消</button>
+    <button id="diff-apply" class="run">套用</button>
+  </div>
 </dialog>
 <dialog id="account-dialog" aria-labelledby="account-email">
   <h2 id="account-email"></h2>

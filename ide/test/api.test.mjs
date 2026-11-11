@@ -57,7 +57,9 @@ const email = `u${Date.now()}@example.com`;
 
 test("accounts", opts, async () => {
   const a = client();
-  assert.deepEqual((await a("/api/me")).data, { accounts: true, user: null });
+  const anon = (await a("/api/me")).data;
+  assert.equal(anon.accounts, true);
+  assert.equal(anon.user, null);
   assert.equal((await a("/api/files")).status, 401);
   assert.equal((await a("/api/register", { method: "POST", body: { email, password: "short" } })).status, 400);
   const r = await a("/api/register", { method: "POST", body: { email, password: "password123" } });
