@@ -325,6 +325,7 @@ impl<'a> W<'a> {
             }
             X::Comp(c) => self.comprehension(c, &e.ty)?,
             X::FStr(parts) => self.fstring(parts)?,
+            X::Lambda(ps, body) if matches!(e.ty, Ty::Func(..)) => self.closure(ps, body, &e.ty)?,
             X::Lambda(..) => return unsupported("lambda"),
             X::Iter(it) => {
                 let et = self.iter_ty(it)?;

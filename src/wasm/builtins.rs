@@ -433,6 +433,8 @@ impl<'a> W<'a> {
             n if n.starts_with("itertools.") => self.itertools_fn(n, a, e)?,
             n if n.starts_with("re.") => self.re_fn(n, a, e)?,
             "gen.next" => self.gen_next(a, e)?,
+            "call_fn" => self.call_fn(a)?,
+            "functools.reduce" => self.reduce(a, e)?,
             "exc.is" => {
                 // isinstance(e, K): K in the exception's class chain
                 let ExprKind::Str(k) = &a[1].kind else { return unsupported("isinstance() of this") };

@@ -24,6 +24,7 @@ mod stmt;
 mod stdlib;
 mod gen;
 mod collections;
+mod closure;
 
 use crate::ir::*;
 use enc::{Block, Code, Comp, Heap, Module, Storage, SubType, Val};
@@ -347,7 +348,7 @@ impl<'a> W<'a> {
                 None => Val::I32,
             },
             Ty::Exc => Val::Ref(Heap::Idx(self.t.exc)),
-            Ty::Func(..) => return unsupported("functions as values"),
+            Ty::Func(ps, r) => Val::Ref(Heap::Idx(self.closure_ty(ps, r)?)),
             Ty::Gen(t) => {
                 let k = self.kind(t)?;
                 Val::Ref(Heap::Idx(self.gen_base(k)))
