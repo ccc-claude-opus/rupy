@@ -157,21 +157,20 @@ impl<'a> W<'a> {
                 self.c().end();
             }
             StmtKind::While(c, body, orelse) => {
-                if self.block_range(orelse).is_some() {
-                    return unsupported("`yield` in the `else` of a loop");
-                }
-                // resuming: into the body, without testing
+                // resuming: into the body, without testing (or, into the `else` code: the
+                // test is false)
+                let rb = self.block_range(body);
                 self.while_loop(body, orelse, |w| {
-                    w.c().local_get(resume).if_(Block::Val(Val::I32)).i32_const(1).else_();
+                    w.c().local_get(resume).if_(Block::Val(Val::I32));
+                    w.resuming_into(rb);
+                    w.c().else_();
                     w.cond(c)?;
                     w.c().end();
                     Ok(())
                 })?;
             }
             StmtKind::For(t, it, body, orelse) => {
-                if self.block_range(orelse).is_some() {
-                    return unsupported("`yield` in the `else` of a loop");
-                }
+                let orelse_range = self.block_range(orelse);
                 // resuming: the cursor is in the frame, and the body goes on with its item
                 self.c().local_get(resume).i32_eqz().if_(Block::Empty);
                 let mut cur = None;
@@ -181,7 +180,7 @@ impl<'a> W<'a> {
                 })?;
                 self.c().end();
                 let cur = cur.unwrap();
-                self.for_loop(t, it, &cur, body, orelse, Some(resume))?;
+                self.for_loop(t, it, &cur, body, orelse, Some((resume, orelse_range)))?;
             }
             StmtKind::Try(body, hs, orelse, fin) => {
                 if hs.iter().any(|h| self.block_range(&h.body).is_some()) || self.block_range(orelse).is_some() || self.block_range(fin).is_some() {

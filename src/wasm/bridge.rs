@@ -49,6 +49,18 @@ pub fn lib_has(feature: &str) -> bool {
     matches!(feature, "pyrt/numpy" | "pyrt/sklearn" | "pyrt/gymnasium" | "pyrt/torch" | "pyrt/re")
 }
 
+/// The keys of the package functions in `rupy_lib.wasm` (computed once).
+pub fn lib_keys() -> &'static std::collections::HashSet<String> {
+    static KEYS: std::sync::OnceLock<std::collections::HashSet<String>> = std::sync::OnceLock::new();
+    KEYS.get_or_init(|| {
+        let imports: String = LIB_MODULES.iter().enumerate().map(|(i, (m, _))| format!("import {} as M{}\n", m, i)).collect();
+        match crate::front::lower(&imports) {
+            Ok(p) => (0..p.funcs.len()).filter(|&f| p.funcs[f].ext.is_some()).map(|f| key(&p, f)).collect(),
+            Err(_) => Default::default(),
+        }
+    })
+}
+
 /// The name the bridge knows package function `f` by: its class, name, Rust
 /// path or template, and parameter types (overloads differ in them).
 pub fn key(p: &Program, f: FuncId) -> String {

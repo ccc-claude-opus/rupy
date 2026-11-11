@@ -23,6 +23,7 @@ mod show;
 mod stmt;
 mod stdlib;
 mod gen;
+mod collections;
 
 use crate::ir::*;
 use enc::{Block, Code, Comp, Heap, Module, Storage, SubType, Val};
@@ -90,6 +91,11 @@ pub fn compile(p: &Program) -> Res<Vec<u8>> {
     }
     if let Some(c) = p.crates.iter().find(|c| !bridge::lib_has(c)) {
         return unsupported(format!("`{}` (a Rust crate, or a package rupy_lib.wasm does not have)", c));
+    }
+    // a package function rupy_lib.wasm does not have (`os.listdir`, ...)
+    let used = pkg::used_package_funcs(p);
+    if let Some(f) = (0..p.funcs.len()).find(|&f| used[f] && p.funcs[f].ext.is_some() && !bridge::lib_keys().contains(&bridge::key(p, f))) {
+        return unsupported(format!("`{}` (a package function rupy_lib.wasm does not have)", p.funcs[f].name));
     }
     let mut w = W::new(p);
     w.program()?;
@@ -346,7 +352,11 @@ impl<'a> W<'a> {
                 let k = self.kind(t)?;
                 Val::Ref(Heap::Idx(self.gen_base(k)))
             }
-            Ty::Deque(_) => return unsupported("collections.deque"),
+            // a deque is a list
+            Ty::Deque(e) => {
+                let k = self.kind(e)?;
+                Val::Ref(Heap::Idx(self.t.list[k as usize]))
+            }
             Ty::File => Val::I64, // the host's handle
             Ty::Pattern(_) | Ty::Match(_) => Val::I64, // the host's handle
             Ty::Var(_) => return unsupported("an uninferred type"),

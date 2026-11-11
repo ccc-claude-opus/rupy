@@ -984,7 +984,10 @@ impl<'a> W<'a> {
             w.throw_kind("ValueError");
             w.c().end();
             w.c().local_get(0).struct_get(l, 1).i32_const(n as i32).i32_gt_s().if_(Block::Empty);
-            w.str_const(&format!("too many values to unpack (expected {})", n));
+            w.str_const(&format!("too many values to unpack (expected {}, got ", n));
+            w.c().local_get(0).struct_get(l, 1).i64_extend_i32_s().call(istr).call(cat);
+            w.str_const(")");
+            w.c().call(cat);
             w.throw_kind("ValueError");
             w.c().end();
             Ok(vec![])

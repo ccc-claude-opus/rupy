@@ -55,7 +55,7 @@ impl<'a> W<'a> {
                         let s = self.t.str;
                         self.c().struct_get(s, 1);
                     }
-                    Ty::List(t) => {
+                    Ty::List(t) | Ty::Deque(t) => {
                         let k = self.kind(t)?;
                         let l = self.t.list[k as usize];
                         self.c().struct_get(l, 1);
@@ -406,7 +406,12 @@ impl<'a> W<'a> {
                     self.c().end();
                 }
                 self.c().local_get(len).i32_const(n).i32_gt_s().if_(Block::Empty);
-                self.labeled(Lab::Plain, |w| w.raise_msg("ValueError", &format!("too many values to unpack (expected {})", n)))?;
+                let (istr, cat) = (self.rt_int_str()?, self.rt_str_concat()?);
+                self.str_const(&format!("too many values to unpack (expected {}, got ", n));
+                self.c().local_get(len).i64_extend_i32_s().call(istr).call(cat);
+                self.str_const(")");
+                self.c().call(cat);
+                self.throw_kind("ValueError");
                 self.c().end();
                 for i in 0..n {
                     self.c().local_get(l).i64_const(i as i64);
@@ -428,6 +433,25 @@ impl<'a> W<'a> {
             n if n.starts_with("itertools.") => self.itertools_fn(n, a, e)?,
             n if n.starts_with("re.") => self.re_fn(n, a, e)?,
             "gen.next" => self.gen_next(a, e)?,
+            "exc.is" => {
+                // isinstance(e, K): K in the exception's class chain
+                let ExprKind::Str(k) = &a[1].kind else { return unsupported("isinstance() of this") };
+                let (id, m, arr) = (self.exc_id(k), self.rt_exc_match()?, self.t.arr_i32);
+                self.expr(&a[0])?;
+                self.c().i32_const(id).array_new_fixed(arr, 1).call(m);
+            }
+            "sys.stdout.write" => {
+                let out = self.rt_out()?;
+                self.expr(&a[0])?;
+                self.c().i32_const(1).call(out);
+            }
+            "json.dumps" => {
+                let f = self.rt_json(&a[0].ty)?;
+                self.expr(&a[0])?;
+                self.c().call(f);
+            }
+            "time.time" | "time.perf_counter" | "time.monotonic" | "time.sleep" | "os.path.join" | "os.path.exists" | "os.remove" | "bin" | "hex" | "oct" | "sys.stdin.readline" | "sys.stdin.read" | "sys.argv" => self.host_fn(name, a, e)?,
+            n if n.starts_with("collections.") || n.starts_with("counter.") || n.starts_with("deque.") || n.starts_with("heapq.") || n.starts_with("bisect.") => self.collections_fn(n, a, e)?,
             n if n.starts_with("list.") => self.list_method(&n[5..], a, e)?,
             n if n.starts_with("dict.") => self.dict_method(&n[5..], a, e)?,
             n if n.starts_with("set.") => self.set_method(&n[4..], a)?,
@@ -547,7 +571,7 @@ impl<'a> W<'a> {
     }
 
     /// Sort the list in local `l` in place (stable; by `key` unless it is None).
-    fn sort_list(&mut self, l: u32, et: &Ty, key: &Expr, rev: bool) -> Res<()> {
+    pub(crate) fn sort_list(&mut self, l: u32, et: &Ty, key: &Expr, rev: bool) -> Res<()> {
         let k = self.kind(et)?;
         let lt = self.t.list[k as usize];
         let kt = match &key.kind {
@@ -588,8 +612,8 @@ impl<'a> W<'a> {
 
     // ------------------------------------------------------------ methods
 
-    fn list_method(&mut self, m: &str, a: &[Expr], e: &Expr) -> Res<()> {
-        let Ty::List(et) = &a[0].ty else { return unsupported("this list method") };
+    pub(crate) fn list_method(&mut self, m: &str, a: &[Expr], e: &Expr) -> Res<()> {
+        let (Ty::List(et) | Ty::Deque(et)) = &a[0].ty else { return unsupported("this list method") };
         let et = et.as_ref().clone();
         let k = self.kind(&et)?;
         let lt = self.t.list[k as usize];
@@ -994,6 +1018,17 @@ impl<'a> W<'a> {
             }
             "copysign" => {
                 self.c().f64_copysign();
+            }
+            "isclose" => {
+                // rel_tol=1e-09: a == b, or neither infinite and |a - b| <= 1e-09 * max(|a|, |b|)
+                let (x, y, d) = (self.fx.local(Val::F64), self.fx.local(Val::F64), self.fx.local(Val::F64));
+                self.c().local_set(y).local_set(x);
+                self.c().local_get(x).local_get(y).f64_sub().f64_abs().local_set(d);
+                self.c().local_get(x).local_get(y).f64_eq();
+                self.c().local_get(d).local_get(y).f64_abs().f64_const(1e-9).f64_mul().f64_le();
+                self.c().local_get(d).local_get(x).f64_abs().f64_const(1e-9).f64_mul().f64_le().i32_or();
+                self.c().local_get(x).f64_abs().f64_const(f64::INFINITY).f64_ne().i32_and();
+                self.c().local_get(y).f64_abs().f64_const(f64::INFINITY).f64_ne().i32_and().i32_or();
             }
             "log2args" => self.math("log_base")?,
             "atan2" | "hypot" | "pow" => self.math(n)?,

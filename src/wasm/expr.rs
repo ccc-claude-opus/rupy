@@ -410,7 +410,7 @@ impl<'a> W<'a> {
                 let s = self.t.str;
                 self.c().struct_get(s, 1).i32_const(0).i32_ne();
             }
-            Ty::List(e) => {
+            Ty::List(e) | Ty::Deque(e) => {
                 let k = self.kind(e)?;
                 let l = self.t.list[k as usize];
                 self.c().struct_get(l, 1).i32_const(0).i32_ne();
@@ -739,7 +739,7 @@ impl<'a> W<'a> {
                 let (a, b) = (self.fx.local(Val::Ref(Heap::Idx(self.t.str))), self.fx.local(Val::Ref(Heap::Idx(self.t.str))));
                 self.c().local_set(b).local_set(a).local_get(b).local_get(a).i64_const(0).call(f).i64_const(0).i64_ge_s();
             }
-            Ty::List(t) => {
+            Ty::List(t) | Ty::Deque(t) => {
                 let t = t.as_ref().clone();
                 let v = self.val(x)?.unwrap();
                 let lv = self.val(coll)?.unwrap();
@@ -833,7 +833,7 @@ impl<'a> W<'a> {
 
     fn index(&mut self, b: &Expr, k: &Expr, e: &Expr) -> Res<()> {
         match &b.ty {
-            Ty::List(t) => {
+            Ty::List(t) | Ty::Deque(t) => {
                 let t = t.as_ref().clone();
                 self.expr(b)?;
                 self.expr(k)?;
@@ -892,7 +892,7 @@ impl<'a> W<'a> {
         Ok(match it {
             Iter::Range(..) => Ty::Int,
             Iter::Over(e) => match &e.ty {
-                Ty::List(t) | Ty::Set(t) | Ty::Gen(t) => t.as_ref().clone(),
+                Ty::List(t) | Ty::Set(t) | Ty::Gen(t) | Ty::Deque(t) => t.as_ref().clone(),
                 Ty::Dict(k, _, _) => k.as_ref().clone(),
                 Ty::Str => Ty::Str,
                 Ty::Tuple(ts) => ts.first().cloned().unwrap_or(Ty::Int),
@@ -1007,7 +1007,7 @@ impl<'a> W<'a> {
                     self.expr(e)?;
                     self.gen_cursor(&t)?
                 }
-                Ty::List(t) | Ty::Gen(t) => {
+                Ty::List(t) | Ty::Gen(t) | Ty::Deque(t) => {
                     let t = t.as_ref().clone();
                     let k = self.kind(&t)?;
                     let xs = self.fx.local(Val::Ref(Heap::Idx(self.t.list[k as usize])));

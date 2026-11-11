@@ -846,8 +846,10 @@ class MersenneTwister {
  * `io.lib` is rupy_lib.wasm for programs that use packages implemented in Rust
  * (bytes, a Module, or a URL; default: next to this file). `io.files` holds the
  * files `open()` reads and writes: anything with get(path) → text | undefined and
- * set(path, text), such as a Map (default: an empty Map); `io.onFile(path, text)`
- * is told of each file written, when it is closed. Returns the exit code.
+ * set(path, text) (and delete(path), for os.remove), such as a Map (default: an
+ * empty Map); `io.onFile(path, text)` is told of each file written, when it is
+ * closed, and of each file removed (text null). `io.argv` is sys.argv
+ * (default: ["main.py"]). Returns the exit code.
  */
 export async function run(bytes, io = {}) {
   const stdout = io.stdout ?? ((s) => console.log(s));
@@ -977,6 +979,56 @@ export async function run(bytes, io = {}) {
       return null;
     },
     "random.sample_at": (i) => BigInt(sampled[Number(i)]),
+  });
+  const based = (n, base, prefix) => (n < 0n ? "-" : "") + prefix + (n < 0n ? -n : n).toString(base);
+  Object.assign(ops, {
+    "time.time": () => Date.now() / 1000,
+    "time.perf_counter": () => performance.now() / 1000,
+    "time.monotonic": () => performance.now() / 1000,
+    "time.sleep": (s) => {
+      const end = performance.now() + s * 1000;
+      while (performance.now() < end); // a program runs synchronously
+      return null;
+    },
+    // posixpath.join
+    "os.path.join": (...parts) => {
+      parts.pop(); // the count
+      let path = "";
+      for (const p of parts) path = p.startsWith("/") ? p : path === "" || path.endsWith("/") ? path + p : path + "/" + p;
+      return path;
+    },
+    "os.path.exists": (p) => files.get(p.replace(/^(\.\/)+/, "")) !== undefined,
+    "os.remove": (p) => {
+      const path = p.replace(/^(\.\/)+/, "");
+      if (files.get(path) === undefined || !files.delete) throw err("FileNotFoundError", `[Errno 2] No such file or directory: '${p}'`);
+      files.delete(path);
+      io.onFile?.(path, null);
+      return null;
+    },
+    "sys.argv": () => io.argv ?? ["main.py"],
+    "sys.stdin.readline": () => nextLine() ?? "",
+    "sys.stdin.read": () => {
+      let s = "";
+      for (let l = nextLine(); l !== null && l !== undefined; l = nextLine()) s += l;
+      return s;
+    },
+    // json.dumps of a str (ensure_ascii)
+    "json.str": (s) => {
+      let out = '"';
+      for (const ch of s) {
+        const c = ch.codePointAt(0);
+        const esc = { '"': '\\"', "\\": "\\\\", "\n": "\\n", "\r": "\\r", "\t": "\\t", "\b": "\\b", "\f": "\\f" }[ch];
+        if (esc) out += esc;
+        else if (c < 0x20 || c > 0x7f) {
+          const u = (x) => "\\u" + x.toString(16).padStart(4, "0");
+          out += c > 0xffff ? u(0xd800 + ((c - 0x10000) >> 10)) + u(0xdc00 + ((c - 0x10000) & 0x3ff)) : u(c);
+        } else out += ch;
+      }
+      return out + '"';
+    },
+    bin: (n) => based(n, 2, "0b"),
+    hex: (n) => based(n, 16, "0x"),
+    oct: (n) => based(n, 8, "0o"),
   });
   // re: a pattern and a match are handles here; rupy_lib.wasm matches (the regex crate)
   let libCall = () => {
@@ -1186,9 +1238,11 @@ if (isMain) {
   };
   let input = null;
   const code = await run(fs.readFileSync(file), {
+    argv: [file.replace(/\.wasm$/, ".py"), ...process.argv.slice(3)],
     files: {
       get: (p) => (fs.existsSync(p) ? fs.readFileSync(p, "utf8") : undefined),
       set: (p, text) => fs.writeFileSync(p, text),
+      delete: (p) => fs.unlinkSync(p),
     },
     stdout: (s) => {
       out += s;

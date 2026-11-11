@@ -180,6 +180,50 @@ impl<'a> W<'a> {
                     lit(w, sb, if default { "})" } else { "}" });
                     w.c().local_get(sb).call(sbs);
                 }
+                Ty::Deque(e) => {
+                    // deque([...]): the list's repr
+                    let k = w.kind(e)?;
+                    let list = Ty::List(e.clone());
+                    let _ = k;
+                    w.str_const("deque(");
+                    w.c().local_get(0);
+                    w.emit_repr(&list)?;
+                    let cat = w.rt_str_concat()?;
+                    w.c().call(cat);
+                    w.str_const(")");
+                    w.c().call(cat);
+                }
+                Ty::Dict(kt, _, DK::Counter) => {
+                    // Counter({key: count, ...}) by count, most first; Counter() when empty
+                    let kt = kt.as_ref().clone();
+                    let d = w.t.dict;
+                    w.c().local_get(0).struct_get(d, 5).i32_eqz().if_(Block::Empty);
+                    w.str_const("Counter()");
+                    w.c().return_().end();
+                    let mc = w.rt_most_common(&kt)?;
+                    let (lt, arr) = (w.t.list[super::K::Ref as usize], w.t.arr[super::K::Ref as usize]);
+                    let tt = w.tuple_ty(&[kt.clone(), Ty::Int])?;
+                    let (sb, l, i) = (w.fx.local(Val::Ref(Heap::Idx(sb_t))), w.fx.local(Val::Ref(Heap::Idx(lt))), w.fx.local(Val::I32));
+                    w.c().local_get(0).call(mc).local_set(l);
+                    w.c().i32_const(0).call(sbn).local_set(sb);
+                    lit(w, sb, "Counter({");
+                    w.c().block(Block::Empty).loop_(Block::Empty);
+                    w.c().local_get(i).local_get(l).struct_get(lt, 1).i32_ge_s().br_if(1);
+                    w.c().local_get(i).if_(Block::Empty);
+                    lit(w, sb, ", ");
+                    w.c().end();
+                    w.c().local_get(sb).local_get(l).struct_get(lt, 0).local_get(i).array_get(arr).ref_cast(Heap::Idx(tt)).struct_get(tt, 0);
+                    w.emit_repr(&kt)?;
+                    w.c().call(sba);
+                    lit(w, sb, ": ");
+                    w.c().local_get(sb).local_get(l).struct_get(lt, 0).local_get(i).array_get(arr).ref_cast(Heap::Idx(tt)).struct_get(tt, 1);
+                    w.emit_repr(&Ty::Int)?;
+                    w.c().call(sba);
+                    w.c().local_get(i).i32_const(1).i32_add().local_set(i).br(0);
+                    w.c().end().end();
+                    lit(w, sb, "})");
+                    w.c().local_get(sb).call(sbs);
+                }
                 Ty::Optional(inner) => {
                     let inner = inner.as_ref().clone();
                     let s = w.t.str;
@@ -237,7 +281,9 @@ impl<'a> W<'a> {
                             lit(w, sb, ")");
                             w.c().local_get(sb).call(sbs);
                         }
-                        None => return unsupported(format!("printing a `{}` without __str__ / __repr__", cl.name)),
+                        // CPython shows the address, which no program can rely on (the
+                        // translator rejects printing it; this is the repr in messages)
+                        None => w.str_const(&format!("<__main__.{} object at 0x7f0000000000>", cl.name)),
                     }
                 }
                 Ty::Pattern(_) | Ty::Match(_) => {

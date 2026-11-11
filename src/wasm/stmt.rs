@@ -71,9 +71,11 @@ impl<'a> W<'a> {
         Ok(())
     }
 
-    /// A `for` loop over the cursor `cur`. `resume` (a generator's local): when
-    /// it is set, the first round goes into the body without taking an item.
-    pub(crate) fn for_loop(&mut self, t: &Target, it: &Iter, cur: &Cursor, body: &[Stmt], orelse: &[Stmt], resume: Option<u32>) -> Res<()> {
+    /// A `for` loop over the cursor `cur`. `resume` (a generator's local, and the
+    /// range of the `yield`s in `orelse`): when it is set, the first round goes
+    /// into the body without taking an item, or leaves for the `else` code when
+    /// it resumes there.
+    pub(crate) fn for_loop(&mut self, t: &Target, it: &Iter, cur: &Cursor, body: &[Stmt], orelse: &[Stmt], resume: Option<(u32, Option<(u32, u32)>)>) -> Res<()> {
         let elem = self.iter_ty(it)?;
         let id = self.new_label();
         self.c().block(Block::Empty);
@@ -84,7 +86,10 @@ impl<'a> W<'a> {
                 w.labeled(Lab::Continue(id), |w| {
                     // exhausted: leave to the `else` code (depth 1)
                     match resume {
-                        Some(r) => {
+                        Some((r, orelse_range)) => {
+                            if let Some((lo, hi)) = orelse_range {
+                                w.c().local_get(r).i32_const(lo as i32).i32_ge_u().i32_const(hi as i32).local_get(r).i32_ge_u().i32_and().br_if(1);
+                            }
                             w.c().local_get(r).i32_eqz().if_(Block::Empty);
                             w.labeled(Lab::Plain, |w| {
                                 w.iter_next(cur, 2)?;

@@ -6,7 +6,7 @@
 //! backend); a compiled pattern and a match are the host's handles (i64).
 
 use super::enc::{Block, Heap, Val};
-use super::{Res, W};
+use super::{unsupported, Res, W};
 use crate::ir::*;
 
 impl<'a> W<'a> {
@@ -38,7 +38,7 @@ impl<'a> W<'a> {
     }
 
     /// The iterator argument `a` (`ExprKind::Iter`) as a list → (its local, its length's local, its element type).
-    fn iter_list(&mut self, a: &Expr) -> Res<(u32, u32, Ty)> {
+    pub(crate) fn iter_list(&mut self, a: &Expr) -> Res<(u32, u32, Ty)> {
         let ExprKind::Iter(it) = &a.kind else { return super::unsupported("this argument") };
         let et = self.iter_ty(it)?;
         self.collect(it, &et)?;
@@ -259,6 +259,171 @@ impl<'a> W<'a> {
         self.c().local_get(i).i32_const(1).i32_add().local_set(i).br(0);
         self.c().end().end();
         Ok(())
+    }
+
+    /// Functions the host runs: `time`, `os.path` and `os.remove` (on the host's
+    /// files), `bin` / `hex` / `oct`. The arguments are strings, but for the ones named here.
+    pub fn host_fn(&mut self, name: &str, a: &[Expr], e: &Expr) -> Res<()> {
+        let t = match name {
+            "time.sleep" => Ty::Float,
+            "bin" | "hex" | "oct" => Ty::Int,
+            _ => Ty::Str,
+        };
+        self.host_args(a, &vec![t; a.len()])?;
+        if name == "os.path.join" {
+            // the parts, then their number
+            self.c().i64_const(a.len() as i64);
+            self.host_arg(&Ty::Int)?;
+        }
+        self.host_call(name, &e.ty)
+    }
+
+    /// `json.dumps(x)` of a value of type `t`: CPython's defaults (", ", ": ", ensure_ascii).
+    pub fn rt_json(&mut self, t: &Ty) -> Res<u32> {
+        let pv = self.val(t)?.unwrap_or(Val::I32);
+        let (sbn, sba, sbs) = (self.rt_sb_new()?, self.rt_sb_add()?, self.rt_sb_str()?);
+        let t = t.clone();
+        self.rt_fn(&format!("json:{:?}", t), move |w| {
+            w.fx.params = vec![pv];
+            let sref = Val::Ref(Heap::Idx(w.t.str));
+            let sb_t = w.t.sb;
+            let sb = w.fx.local(Val::Ref(Heap::Idx(sb_t)));
+            let lit = |w: &mut W, s: &str| {
+                w.c().local_get(sb);
+                w.str_const(s);
+                w.c().call(sba);
+            };
+            // a part: the json of a value of `t` (pushed by `push`)
+            let part = |w: &mut W, t: &Ty, push: &dyn Fn(&mut W) -> Res<()>| -> Res<()> {
+                let f = w.rt_json(t)?;
+                w.c().local_get(sb);
+                push(w)?;
+                w.c().call(f).call(sba);
+                Ok(())
+            };
+            match &t {
+                Ty::Int => {
+                    let f = w.rt_int_str()?;
+                    w.c().local_get(0).call(f);
+                    return Ok(vec![sref]);
+                }
+                Ty::Bool => {
+                    let s = w.t.str;
+                    w.c().local_get(0).if_(Block::Val(Val::Ref(Heap::Idx(s))));
+                    w.str_const("true");
+                    w.c().else_();
+                    w.str_const("false");
+                    w.c().end();
+                    return Ok(vec![sref]);
+                }
+                Ty::None => {
+                    w.str_const("null");
+                    return Ok(vec![sref]);
+                }
+                Ty::Float => {
+                    let s = w.t.str;
+                    w.c().local_get(0).local_get(0).f64_ne().if_(Block::Val(Val::Ref(Heap::Idx(s))));
+                    w.str_const("NaN");
+                    w.c().else_().local_get(0).f64_abs().f64_const(f64::INFINITY).f64_eq().if_(Block::Val(Val::Ref(Heap::Idx(s))));
+                    w.c().local_get(0).f64_const(0.0).f64_gt().if_(Block::Val(Val::Ref(Heap::Idx(s))));
+                    w.str_const("Infinity");
+                    w.c().else_();
+                    w.str_const("-Infinity");
+                    w.c().end().else_().local_get(0);
+                    w.emit_repr(&Ty::Float)?;
+                    w.c().end().end();
+                    return Ok(vec![sref]);
+                }
+                Ty::Str => {
+                    w.c().local_get(0);
+                    w.host_arg(&Ty::Str)?;
+                    w.host_call("json.str", &Ty::Str)?;
+                    return Ok(vec![sref]);
+                }
+                _ => {}
+            }
+            w.c().i32_const(0).call(sbn).local_set(sb);
+            match &t {
+                Ty::Optional(inner) => {
+                    let inner = inner.as_ref().clone();
+                    w.c().local_get(0).ref_is_null().if_(Block::Empty);
+                    lit(w, "null");
+                    w.c().else_();
+                    part(w, &inner, &|w| {
+                        w.c().local_get(0);
+                        w.unbox_opt(&inner)
+                    })?;
+                    w.c().end();
+                }
+                Ty::List(e) => {
+                    let e = e.as_ref().clone();
+                    let lt = w.t.list[w.kind(&e)? as usize];
+                    let i = w.fx.local(Val::I32);
+                    lit(w, "[");
+                    w.c().block(Block::Empty).loop_(Block::Empty);
+                    w.c().local_get(i).local_get(0).struct_get(lt, 1).i32_ge_s().br_if(1);
+                    w.c().local_get(i).if_(Block::Empty);
+                    lit(w, ", ");
+                    w.c().end();
+                    part(w, &e, &|w| {
+                        w.c().local_get(0).local_get(i).i64_extend_i32_s();
+                        w.list_get(&e)
+                    })?;
+                    w.c().local_get(i).i32_const(1).i32_add().local_set(i).br(0);
+                    w.c().end().end();
+                    lit(w, "]");
+                }
+                Ty::Tuple(ts) => {
+                    let tt = w.tuple_ty(ts)?;
+                    lit(w, "[");
+                    for (j, et) in ts.iter().enumerate() {
+                        if j > 0 {
+                            lit(w, ", ");
+                        }
+                        part(w, et, &|w| {
+                            w.c().local_get(0).struct_get(tt, j as u32);
+                            Ok(())
+                        })?;
+                    }
+                    lit(w, "]");
+                }
+                Ty::Dict(kt, vt, _) => {
+                    let (kt, vt) = (kt.as_ref().clone(), vt.as_ref().clone());
+                    let (d, ae) = (w.t.dict, w.t.arr[3]);
+                    let (i, first) = (w.fx.local(Val::I32), w.fx.local(Val::I32));
+                    let next = w.rt_dict_next()?;
+                    lit(w, "{");
+                    w.c().i32_const(1).local_set(first);
+                    w.c().block(Block::Empty).loop_(Block::Empty);
+                    w.c().local_get(0).local_get(i).call(next).local_tee(i).i32_const(0).i32_lt_s().br_if(1);
+                    w.c().local_get(first).i32_eqz().if_(Block::Empty);
+                    lit(w, ", ");
+                    w.c().end().i32_const(0).local_set(first);
+                    // keys are strings: an int or a bool key is quoted
+                    if kt != Ty::Str {
+                        lit(w, "\"");
+                    }
+                    part(w, &kt, &|w| {
+                        w.c().local_get(0).struct_get(d, 0).local_get(i).array_get(ae);
+                        w.unbox_eq(&kt)
+                    })?;
+                    if kt != Ty::Str {
+                        lit(w, "\"");
+                    }
+                    lit(w, ": ");
+                    part(w, &vt, &|w| {
+                        w.c().local_get(0).struct_get(d, 1).local_get(i).array_get(ae);
+                        w.unbox_eq(&vt)
+                    })?;
+                    w.c().local_get(i).i32_const(1).i32_add().local_set(i).br(0);
+                    w.c().end().end();
+                    lit(w, "}");
+                }
+                t => return unsupported(format!("json.dumps() of {:?}", t)),
+            }
+            w.c().local_get(sb).call(sbs);
+            Ok(vec![sref])
+        })
     }
 
     /// A host result on the stack (i64: a handle, -1 for None) → `Match | None`.
