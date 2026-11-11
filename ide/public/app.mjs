@@ -2,6 +2,7 @@
 // files on the server (sync.mjs) when signed in; Monaco (editor.mjs), notebooks
 // (notebook.mjs) and two workers (runner.mjs): one runs programs, one compiles
 // as you type to mark errors.
+import { initSplitters } from "./splitters.mjs";
 import { openFs, dbName, deleteFs } from "./fs.mjs";
 import { Sync, api } from "./sync.mjs";
 import { loadMonaco, darkQuery, themeName } from "./editor.mjs";
@@ -30,6 +31,7 @@ const store = {
     } catch {}
   },
 };
+initSplitters(document.querySelector(".layout"), store);
 
 // the account: { accounts: whether the server has them, user: { id, email } | null }
 let me = { accounts: false, user: null, ai: false };

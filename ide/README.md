@@ -18,6 +18,7 @@ node --test ide/test/*.test.mjs          # 筆記本邏輯 + API（API 測試會
 ## 目前功能（M0–M6）
 
 * Monaco 編輯器（從 jsdelivr 載入），Python 語法上色，深色模式跟著系統。
+* 檔案清單、編輯器、輸出區與 AI 助手之間的邊界可以拖曳調整大小（像 VS Code），大小記在瀏覽器裡；點兩下邊界還原。
 * 檔案存在瀏覽器的 IndexedDB；側欄可以新增、重新命名、刪除。⌘/Ctrl + 點擊加選或取消一個檔案，Shift + 點擊選一段，再按側欄上方的「✕ N」或 Delete 鍵一起刪除（Esc 取消選取）。第一次開會放入範例程式。
 * 執行（Ctrl/⌘ + Enter）在 Web Worker 裡，輸出邊跑邊顯示；「停止」會結束 Worker，所以無窮迴圈也停得下來。
 * 打字時另一個 Worker 會在背景編譯，把編譯錯誤標在那一行。
