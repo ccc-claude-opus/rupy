@@ -191,6 +191,13 @@ impl<'a> W<'a> {
                     let r = self.fx.ret.unwrap();
                     self.zero(r);
                 }
+                if self.fx.ret.is_some() && e.is_none() {
+                    let r = self.fx.ret.unwrap();
+                    self.zero(r);
+                }
+                for l in self.fx.outs.clone() {
+                    self.c().local_get(l);
+                }
                 self.c().return_();
             }
             StmtKind::Raise(name, msg) => self.raise(name, msg.as_ref())?,
@@ -267,7 +274,7 @@ impl<'a> W<'a> {
         Ok(())
     }
 
-    fn try_stmt(&mut self, body: &[Stmt], hs: &[Handler], orelse: &[Stmt], fin: &[Stmt]) -> Res<()> {
+    pub(crate) fn try_stmt(&mut self, body: &[Stmt], hs: &[Handler], orelse: &[Stmt], fin: &[Stmt]) -> Res<()> {
         if fin.is_empty() {
             return self.try_except(body, hs, orelse);
         }

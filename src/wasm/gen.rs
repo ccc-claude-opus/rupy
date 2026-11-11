@@ -6,7 +6,9 @@
 //! `yield` it stopped at (the state; 0: the start, -1: finished), as
 //! Asyncify does: a statement runs when the body is not resuming, and a
 //! statement that holds the `yield` is entered (an `if` takes the branch
-//! that holds it, a loop enters its body without testing or advancing). At a
+//! that holds it, a loop enters its body without testing or advancing, a
+//! `try` goes into the handler that holds it). A `yield` in `finally` code
+//! resumes on the path without an exception. At a
 //! `yield` the value and the state go into the frame, the locals are saved,
 //! and the function returns 1; at the end (or `return`) it returns 0.
 
@@ -182,12 +184,25 @@ impl<'a> W<'a> {
                 let cur = cur.unwrap();
                 self.for_loop(t, it, &cur, body, orelse, Some((resume, orelse_range)))?;
             }
-            StmtKind::Try(body, hs, orelse, fin) => {
-                if hs.iter().any(|h| self.block_range(&h.body).is_some()) || self.block_range(orelse).is_some() || self.block_range(fin).is_some() {
-                    return unsupported("`yield` in `except`, `else` or `finally`");
+            StmtKind::Try(_, hs, _, fin) => {
+                // resuming in a handler: its body (the exception variable is in the
+                // frame), then the `finally` code; else the whole statement (resuming in
+                // the body, the `else` or the `finally` code goes there)
+                let mut ends = 0;
+                for h in hs {
+                    let Some(r) = self.block_range(&h.body) else { continue };
+                    self.resuming_into(Some(r));
+                    self.c().if_(Block::Empty);
+                    self.labeled(Lab::Plain, |w| w.try_stmt(&h.body, &[], &[], fin))?;
+                    self.c().else_();
+                    self.fx.labels.push(Lab::Plain);
+                    ends += 1;
                 }
-                let _ = body;
                 self.stmt_kind(s)?;
+                for _ in 0..ends {
+                    self.fx.labels.pop();
+                    self.c().end();
+                }
             }
             _ => return unsupported("`yield` in this statement"),
         }
@@ -208,6 +223,9 @@ impl<'a> W<'a> {
         let f = &self.p.funcs[fid];
         if f.self_var.is_some() {
             return unsupported("generator methods");
+        }
+        if !super::out_params(f).is_empty() {
+            return unsupported("a generator that rebinds a variable of the enclosing function (nonlocal)");
         }
         let Ty::Gen(et) = &f.ret else { return unsupported("this generator") };
         let k = self.kind(et)?;

@@ -3,6 +3,10 @@ use std::process::Command;
 
 use rupy::project;
 
+/// Node's stack (KB) for a wasm program: deep recursion (sys.setrecursionlimit) needs
+/// more than the default (about 1 MB); the main thread has 8 MB.
+const NODE_STACK: &str = "--stack-size=4000";
+
 pub const USAGE: &str = "\
 usage: rupy <command> [args...]
 
@@ -184,7 +188,7 @@ fn wasm_run(file: &str) -> i32 {
             return 1;
         }
     };
-    let code = match Command::new("node").arg(&host).arg(&out).status() {
+    let code = match Command::new("node").arg(NODE_STACK).arg(&host).arg(&out).status() {
         Ok(s) => s.code().unwrap_or(1),
         Err(e) => {
             eprintln!("error: cannot run node: {}", e);
@@ -238,7 +242,7 @@ fn test_wasm(args: &[String]) -> i32 {
                 sc.spawn(move || {
                     let input = std::fs::read(f.with_extension("in")).unwrap_or_default();
                     let a = project::run(Command::new(py).arg(f).env("PYTHONPATH", project::python_path()).env("MPLBACKEND", "Agg"), &input);
-                    let b = project::run(Command::new("node").arg(host).arg(out), &input);
+                    let b = project::run(Command::new("node").arg(NODE_STACK).arg(host).arg(out), &input);
                     (a, b)
                 })
             })

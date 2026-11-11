@@ -191,6 +191,8 @@ pub(crate) struct Fx {
     pub next_label: u32,
     /// compiling a generator's resume function
     pub gen: Option<gen::GenFx>,
+    /// the locals of the `nonlocal` variables, returned after the result
+    pub outs: Vec<u32>,
 }
 
 impl Fx {
@@ -521,14 +523,21 @@ impl<'a> W<'a> {
             return self.gen_func(fid);
         }
         if f.cache {
-            return unsupported("@functools.cache");
+            // the body, and in its place a function that remembers its results
+            let body = self.reserve();
+            self.func_into(fid, body)?;
+            return self.cached(fid, body);
         }
         if !f.dispatch.is_empty() {
             return self.dispatcher(fid);
         }
-        if !f.captures.is_empty() && assigns_capture(f) {
-            return unsupported("a nested function that rebinds a variable of the enclosing function (nonlocal)");
-        }
+        let idx = self.user[fid];
+        self.func_into(fid, idx)
+    }
+
+    /// Compile function `fid` as function `idx`.
+    fn func_into(&mut self, fid: FuncId, idx: u32) -> Res<()> {
+        let f = &self.p.funcs[fid];
         self.fx = Fx { fid: Some(fid), drops: pkg::droppable_vars(self.p, fid), ..Default::default() };
         let mut params = vec![];
         if let Some(sv) = f.self_var {
@@ -557,14 +566,74 @@ impl<'a> W<'a> {
         }
         let ret = if f.is_init { None } else { self.val(&f.ret)? };
         self.fx.ret = ret;
+        // nonlocal variables: returned after the result
+        let mut results: Vec<Val> = ret.into_iter().collect();
+        for i in out_params(f) {
+            let l = self.fx.vars[&f.params[i].var];
+            self.fx.outs.push(l);
+            results.push(self.val(&f.vars[f.params[i].var].ty)?.unwrap());
+        }
         let body = f.body.clone();
         self.block(&body)?;
         // falling off the end returns None (a non-None function always returns before)
         if let Some(r) = ret {
             self.zero(r);
         }
+        for l in self.fx.outs.clone() {
+            self.c().local_get(l);
+        }
+        self.define(idx, results);
+        Ok(())
+    }
+
+    /// `@functools.cache`: function `fid` looks its arguments up in a dict (a
+    /// global, made at the first call) and calls `body` for the ones it has not seen.
+    fn cached(&mut self, fid: FuncId, body: u32) -> Res<()> {
+        let f = &self.p.funcs[fid];
+        if f.self_var.is_some() || !out_params(f).is_empty() {
+            return unsupported("@functools.cache on this function");
+        }
+        let Some(rv) = self.val(&f.ret)? else { return unsupported("@functools.cache on a function without a result") };
+        let pts: Vec<Ty> = f.params.iter().map(|q| f.vars[q.var].ty.clone()).collect();
+        let kt = if pts.len() == 1 { pts[0].clone() } else { Ty::Tuple(pts.clone()) };
+        let (d, ae) = (self.t.dict, self.t.arr[3]);
+        let mut init = Code::default();
+        init.ref_null(Heap::Idx(d));
+        self.m.globals.push((Val::Ref(Heap::Idx(d)), true, init));
+        let g = (self.m.globals.len() - 1) as u32;
+        let (find, set) = (self.rt_dict_find()?, self.rt_dict_set(&kt, &f.ret)?);
+        self.fx = Fx::default();
+        let mut params = vec![];
+        for t in &pts {
+            params.push(self.val(t)?.unwrap_or(Val::I32));
+        }
+        self.fx.params = params.clone();
+        let (key, i, r) = (self.fx.local(Val::Ref(Heap::Eq)), self.fx.local(Val::I32), self.fx.local(rv));
+        self.c().global_get(g).ref_is_null().if_(Block::Empty);
+        self.dict_new(&kt)?;
+        self.c().global_set(g).end();
+        // the key: the argument, or a tuple of them
+        for j in 0..params.len() {
+            self.c().local_get(j as u32);
+        }
+        if pts.len() > 1 {
+            let tt = self.tuple_ty(&pts)?;
+            self.c().struct_new(tt);
+        }
+        self.box_eq(&kt)?;
+        self.c().local_set(key);
+        self.c().global_get(g).local_get(key).call(find).local_tee(i).i32_const(0).i32_ge_s().if_(Block::Empty);
+        self.c().global_get(g).struct_get(d, 1).local_get(i).array_get(ae);
+        self.unbox_eq(&f.ret)?;
+        self.c().return_().end();
+        for j in 0..params.len() {
+            self.c().local_get(j as u32);
+        }
+        self.c().call(body).local_set(r).global_get(g).local_get(key).local_get(r);
+        self.box_eq(&f.ret)?;
+        self.c().call(set).local_get(r);
         let idx = self.user[fid];
-        self.define(idx, ret.into_iter().collect());
+        self.define(idx, vec![rv]);
         Ok(())
     }
 
@@ -676,9 +745,17 @@ impl<'a> W<'a> {
 }
 
 /// Does a nested function assign one of its captured variables (its last parameters)?
-fn assigns_capture(f: &Func) -> bool {
+/// The parameters of nested function `f` that are enclosing variables it
+/// rebinds (`nonlocal`): their indices. They are copied in and, as extra
+/// results, copied back out at each call (the translator only takes programs
+/// where that is the same as sharing the variable: nothing else uses it meanwhile).
+pub(crate) fn out_params(f: &Func) -> Vec<usize> {
     let n = f.params.len();
-    let caps: Vec<VarId> = f.params[n.saturating_sub(f.captures.len())..].iter().map(|q| q.var).collect();
+    (n.saturating_sub(f.captures.len())..n).filter(|&i| assigns_capture(f, f.params[i].var)).collect()
+}
+
+fn assigns_capture(f: &Func, cap: VarId) -> bool {
+    let caps = [cap];
     fn walk(b: &[Stmt], caps: &[VarId]) -> bool {
         b.iter().any(|s| {
             let direct = match &s.kind {

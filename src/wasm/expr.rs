@@ -212,6 +212,12 @@ impl<'a> W<'a> {
                 self.args(*f, args)?;
                 let fi = self.user[*f];
                 self.c().call(fi);
+                // nonlocal variables come back after the result: into the caller's variables
+                for i in super::out_params(&self.p.funcs[*f]).into_iter().rev() {
+                    let ExprKind::Var(v) = &args[i].kind else { return unsupported("passing this nonlocal variable") };
+                    let l = self.fx.vars[v];
+                    self.c().local_set(l);
+                }
                 self.void_result(*f, &e.ty)?;
             }
             X::Method(recv, f, args) => {

@@ -435,6 +435,15 @@ impl<'a> W<'a> {
             "gen.next" => self.gen_next(a, e)?,
             "call_fn" => self.call_fn(a)?,
             "functools.reduce" => self.reduce(a, e)?,
+            "exc.field" => {
+                // e.f of a caught exception object: the object is the exception's field 3
+                let (ExprKind::Str(cn), ExprKind::Str(f)) = (&a[1].kind, &a[2].kind) else { return unsupported("this exception attribute") };
+                let Some(c) = self.p.classes.iter().position(|k| &k.name == cn && k.exc.is_some()) else { return unsupported("this exception attribute") };
+                let Some(i) = self.p.classes[c].fields.iter().position(|x| &x.name == f) else { return unsupported("this exception attribute") };
+                let (exc, ct) = (self.t.exc, self.class_ty[c]);
+                self.expr(&a[0])?;
+                self.c().struct_get(exc, 3).ref_cast(Heap::Idx(ct)).struct_get(ct, i as u32 + 1);
+            }
             "exc.is" => {
                 // isinstance(e, K): K in the exception's class chain
                 let ExprKind::Str(k) = &a[1].kind else { return unsupported("isinstance() of this") };
