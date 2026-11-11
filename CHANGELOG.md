@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Functions as values on the Rust backend: a `Callable` is a `pyrt::Fun<dyn Fn>` (an `Rc` closure),
+  so closures can be returned (`make_adder`), kept in lists, dicts and dataclass fields, and
+  called directly (`b.on_click(x)`, `pick("add")(2.0, 3.5)`). A lambda that is kept and reads a
+  variable assigned more than once (a loop variable) is rejected on both backends: rupy copies
+  it when the lambda is made, Python reads it when it is called.
 - **rstatistics**, R's probability and statistics functions, in `rstatistics/` (`pip install rstatistics`, pure Python,
   no dependencies): `d`/`p`/`q` of 17 distributions, R's random numbers after `set_seed`
   (Mersenne-Twister, inversion, `sample`), `t_test`, `var_test`, `chisq_test`, `binom_test`,

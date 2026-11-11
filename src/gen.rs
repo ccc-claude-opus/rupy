@@ -101,7 +101,7 @@ pub fn rty(t: &Ty, p: &Program) -> String {
         Ty::Func(ps, ret) => {
             let ps: Vec<String> = ps.iter().map(|t| fn_arg_ty(t, p)).collect();
             let r = if **ret == Ty::None { String::new() } else { format!(" -> {}", rty(ret, p)) };
-            format!("impl Fn({}){}", ps.join(", "), r)
+            format!("pyrt::Fun<dyn Fn({}){}>", ps.join(", "), r)
         }
         Ty::Tuple(ts) => {
             let v: Vec<String> = ts.iter().map(|t| rty(t, p)).collect();
@@ -3164,18 +3164,54 @@ impl<'a> FGen<'a> {
                         && !f.cache;
                     if same {
                         let name = if f.name == "main" { "py_main".to_string() } else { ident(&f.name) };
-                        return Ok(r(name, Kind::Val, ATOM));
+                        return Ok(r(format!("{}(std::rc::Rc::new({}))", self.ty(&e.ty).replacen("<", "::<", 1), name), Kind::Val, ATOM));
                     }
                 }
-                // a closure: Copy arguments by value, others by reference (`fn_arg_ty`)
+                if self.modifies(body) {
+                    return err(e.line, "a lambda that changes an object is not supported")
+                        .map_err(|e| e.hint("use a def function, or return the new value"));
+                }
+                // the variables it captures: copies, moved into the closure
+                let (mut read, mut bound) = (vec![], ps.clone());
+                lambda_reads(body, &mut read, &mut bound);
+                let mut lets = vec![];
+                let mut saved = vec![];
+                for (v, x) in read {
+                    if bound.contains(&v) {
+                        continue;
+                    }
+                    let t = self.f.vars[v].ty.clone();
+                    let rx = self.ex(&x)?;
+                    let code = self.owned_r(&rx, &t, false);
+                    let n = format!("__c_{}", ident(&self.f.vars[v].name).trim_start_matches("r#"));
+                    lets.push(format!("let {} = {};", n, code));
+                    saved.push((v, self.renames.insert(v, n), self.kinds.insert(v, Kind::Place)));
+                }
+                // its parameters: Copy arguments by value, others by reference (`fn_arg_ty`)
                 let mut pats = vec![];
                 for v in ps {
                     let t = self.f.vars[*v].ty.clone();
                     self.kinds.insert(*v, if t.is_copy() { Kind::Place } else { Kind::Ref });
                     pats.push(format!("{}: {}", self.name(*v), fn_arg_ty(&t, self.p)));
                 }
-                let b = self.owned(body)?;
-                r(format!("|{}| {}", pats.join(", "), b), Kind::Val, LOW)
+                let b = self.owned(body);
+                for (v, n, k) in saved {
+                    match n {
+                        Some(n) => self.renames.insert(v, n),
+                        None => self.renames.remove(&v),
+                    };
+                    match k {
+                        Some(k) => self.kinds.insert(v, k),
+                        None => self.kinds.remove(&v),
+                    };
+                }
+                let ctor = self.ty(&e.ty).replacen("<", "::<", 1);
+                let f = format!("{}(std::rc::Rc::new(move |{}| {}))", ctor, pats.join(", "), b?);
+                if lets.is_empty() {
+                    r(f, Kind::Val, ATOM)
+                } else {
+                    r(format!("{{ {} {} }}", lets.join(" "), f), Kind::Val, ATOM)
+                }
             }
             K::Lambda(..) => return err(e.line, "lambda outside sort/min/max"),
             K::Iter(it) => {
@@ -4636,7 +4672,9 @@ impl<'a> FGen<'a> {
                 for x in &a[1..] {
                     xs.push(if x.ty.is_copy() { self.val(x)?.code } else { self.borrow(x)? });
                 }
-                v(format!("{}({})", par(&f, ATOM), xs.join(", ")))
+                // `(b.on_click)(x)`: a field or call result is called, not a method
+                let fc = if f.code.chars().all(|c| c.is_alphanumeric() || c == '_') { f.code.clone() } else { format!("({})", f.code) };
+                v(format!("{}({})", fc, xs.join(", ")))
             }
             n if STD.iter().any(|m| n.starts_with(m)) => self.std_builtin(n, a, e)?,
             n if n.starts_with("list.") => self.list_method(&n[5..], a, e)?,
@@ -5329,6 +5367,23 @@ fn stmt_has_builtin(s: &Stmt, name: &str) -> bool {
     let mut found = false;
     stmt_exprs(s, &mut |e| ex(e, name, &mut found));
     found || s.blocks().iter().any(|b| b.iter().any(|x| stmt_has_builtin(x, name)))
+}
+
+/// The variables a lambda body reads (with an expression reading each), but
+/// those that lambdas inside it bind.
+fn lambda_reads(e: &Expr, out: &mut Vec<(VarId, Expr)>, bound: &mut Vec<VarId>) {
+    match &e.kind {
+        ExprKind::Var(v) => {
+            if !out.iter().any(|(w, _)| w == v) {
+                out.push((*v, e.clone()));
+            }
+        }
+        ExprKind::Lambda(ps, b) => {
+            bound.extend(ps);
+            lambda_reads(b, out, bound);
+        }
+        _ => e.children(&mut |c| lambda_reads(c, out, bound)),
+    }
 }
 
 /// How a `Callable` takes an argument: Copy values by value, others by reference.

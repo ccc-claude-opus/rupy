@@ -242,6 +242,9 @@ pub fn analyze(p: &Program) -> Res<Own> {
             }
         }
     }
+    for f in &p.funcs {
+        captures_fixed(f, &o)?;
+    }
     for fid in 0..p.funcs.len() {
         let (moves, muts, rebound, iter_mut, loop_live, via, takes) = {
             let mut a = Fn::new(p, &o, fid);
@@ -2015,6 +2018,99 @@ impl<'a> Fn<'a> {
         all(&self.f.body, self, &mut walk);
         found
     }
+}
+
+/// A lambda that is kept (stored, returned, passed to be kept) copies the
+/// variables it reads when it is made; Python reads them when it is called.
+/// That is the same only if they are not assigned again: reject the others.
+fn captures_fixed(f: &Func, o: &Own) -> Res<()> {
+    // how often each variable is assigned, and which are assigned in a loop
+    fn assigns(s: &[Stmt], in_loop: bool, n: &mut HashMap<VarId, usize>, looped: &mut HashSet<VarId>) {
+        for x in s {
+            let mut vs = vec![];
+            match &x.kind {
+                StmtKind::Assign(t, _) | StmtKind::For(t, ..) => t.vars(&mut vs),
+                StmtKind::AugVar(v, ..) => vs.push(*v),
+                _ => {}
+            }
+            for v in vs {
+                *n.entry(v).or_default() += 1;
+                if in_loop || matches!(x.kind, StmtKind::For(..)) {
+                    looped.insert(v);
+                }
+            }
+            let lp = in_loop || matches!(x.kind, StmtKind::For(..) | StmtKind::While(..));
+            for b in x.blocks() {
+                assigns(b, lp, n, looped);
+            }
+        }
+    }
+    // what the kept lambdas read (with their lines), and the parameters of all lambdas
+    fn lambdas(e: &Expr, o: &Own, transient: bool, kept: &mut Vec<(VarId, u32)>, params: &mut HashSet<VarId>) {
+        match &e.kind {
+            ExprKind::Lambda(ps, b) => {
+                params.extend(ps);
+                if !transient && matches!(e.ty, Ty::Func(..)) {
+                    let mut u = vec![];
+                    uses(b, &mut u);
+                    kept.extend(u.into_iter().map(|v| (v, e.line)));
+                }
+                lambdas(b, o, false, kept, params);
+            }
+            // an argument the callee only reads is not kept
+            ExprKind::Call(g, args) | ExprKind::Method(_, g, args) => {
+                if let ExprKind::Method(r, ..) = &e.kind {
+                    lambdas(r, o, false, kept, params);
+                }
+                for (i, a) in args.iter().enumerate() {
+                    lambdas(a, o, o.params[*g].get(i) == Some(&Mode::Ref), kept, params);
+                }
+            }
+            ExprKind::Builtin("call_fn", args) => args.iter().for_each(|a| lambdas(a, o, true, kept, params)),
+            _ => e.children(&mut |c| lambdas(c, o, false, kept, params)),
+        }
+    }
+    let (mut n, mut looped) = (HashMap::new(), HashSet::new());
+    assigns(&f.body, false, &mut n, &mut looped);
+    let check = |e: &Expr| -> Res<()> {
+        let (mut kept, mut params) = (vec![], HashSet::new());
+        lambdas(e, o, false, &mut kept, &mut params);
+        for (v, line) in kept {
+            {
+                if params.contains(&v) {
+                    continue;
+                }
+                let var = &f.vars[v];
+                let count = n.get(&v).copied().unwrap_or(0) + usize::from(var.kind == VarKind::Param);
+                let changes = match var.kind {
+                    VarKind::Local | VarKind::Param => count > 1 || looped.contains(&v),
+                    VarKind::Bound => true,
+                    _ => false,
+                };
+                if changes {
+                    return err(line, format!("this lambda is kept and reads `{}`, which is assigned more than once (rupy copies it when the lambda is made, Python reads it when it is called)", var.name))
+                        .map_err(|e| e.hint("make the lambda in a function that takes the value as a parameter: `def adder(n: int) -> Callable[[int], int]: return lambda x: x + n`"));
+                }
+            }
+        }
+        Ok(())
+    };
+    fn walk(s: &[Stmt], check: &dyn std::ops::Fn(&Expr) -> Res<()>) -> Res<()> {
+        for x in s {
+            let mut r = Ok(());
+            crate::gen::stmt_exprs(x, &mut |e| {
+                if r.is_ok() {
+                    r = check(e);
+                }
+            });
+            r?;
+            for b in x.blocks() {
+                walk(b, check)?;
+            }
+        }
+        Ok(())
+    }
+    walk(&f.body, &check)
 }
 
 /// Variables used by an expression (including inside closures).

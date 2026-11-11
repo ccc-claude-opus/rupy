@@ -215,16 +215,15 @@ impl Front {
         Ok(self.mk(line, Ty::Func(tys, Box::new(ret)), ExprKind::Lambda(vs, Box::new(body))))
     }
 
-    /// `f(args)` where f is a `Callable` variable.
-    pub(super) fn call_value(&mut self, v: VarId, ps: &[Ty], r: &Ty, args: &ast::Arguments, line: u32) -> Res<Expr> {
+    /// `f(args)` where f is a `Callable` value (a variable, field or call result).
+    pub(super) fn call_value(&mut self, f: Expr, ps: &[Ty], r: &Ty, args: &ast::Arguments, line: u32) -> Res<Expr> {
         if !args.keywords.is_empty() {
             return err(line, "a Callable takes positional arguments only");
         }
         if args.args.len() != ps.len() {
             return err(line, format!("this Callable takes {} argument(s)", ps.len()));
         }
-        let t = self.var(v).ty.clone();
-        let mut out = vec![self.mk(line, t, ExprKind::Var(v))];
+        let mut out = vec![f];
         for (i, p) in ps.iter().enumerate() {
             out.push(self.arg(args, i, p, "argument")?);
         }

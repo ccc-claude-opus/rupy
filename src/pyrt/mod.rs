@@ -266,6 +266,42 @@ tuple_py!(0 A, 1 B, 2 C, 3 D);
 tuple_py!(0 A, 1 B, 2 C, 3 D, 4 E);
 tuple_py!(0 A, 1 B, 2 C, 3 D, 4 E, 5 F);
 
+/// A `Callable` value: a shared closure (`pyrt::Fun<dyn Fn(i64) -> i64>`), so it
+/// can be copied into lists, dicts and fields and returned. `f(x)` calls it.
+pub struct Fun<F: ?Sized>(pub std::rc::Rc<F>);
+
+impl<F: ?Sized> Clone for Fun<F> {
+    fn clone(&self) -> Self {
+        Fun(self.0.clone())
+    }
+}
+
+impl<F: ?Sized> std::ops::Deref for Fun<F> {
+    type Target = F;
+    fn deref(&self) -> &F {
+        &self.0
+    }
+}
+
+/// `==` of functions: the same object
+impl<F: ?Sized> PartialEq for Fun<F> {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::addr_eq(std::rc::Rc::as_ptr(&self.0), std::rc::Rc::as_ptr(&other.0))
+    }
+}
+
+impl<F: ?Sized> fmt::Debug for Fun<F> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("<function>")
+    }
+}
+
+impl<F: ?Sized> Py for Fun<F> {
+    fn fmt_repr(&self, out: &mut String) {
+        out.push_str("<function>")
+    }
+}
+
 /// `{}` shows `str(x)`; width and alignment apply to the whole text.
 pub struct S<'a, T: ?Sized>(pub &'a T);
 /// `{}` shows `repr(x)`.

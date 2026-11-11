@@ -18,7 +18,7 @@ usually, a hint. This document lists what is accepted.
 | `set[T]` | `IndexSet<T>` | iteration order differs from CPython (see 9) |
 | `tuple[A, B]` | `(A, B)` | fixed length |
 | `T \| None`, `Optional[T]` | `Option<T>` | narrowed by `is None` / `is not None` / truth tests |
-| `Callable[[A], R]` | `&impl Fn(A) -> R` | parameters only |
+| `Callable[[A], R]` | `pyrt::Fun<dyn Fn(A) -> R>` (a shared closure) | in parameters, variables, returns, lists, dicts and fields; a kept lambda copies the variables it reads, so they must be assigned only once |
 | `Iterator[T]`, `Generator[T, None, None]` | `pyrt::Gen<T>` | return type of generators |
 | `defaultdict[K, V]`, `Counter[K]`, `deque[T]` | `pyrt::DefaultDict`, `pyrt::Counter`, `VecDeque` | |
 | a class | a struct (an enum over the created classes when it has subclasses) | |

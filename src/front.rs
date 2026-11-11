@@ -3931,7 +3931,9 @@ impl Front {
                 let name = n.id.as_str();
                 if let Some(v) = self.lookup(name) {
                     if let Ty::Func(ps, r) = self.norm(&self.var(v).ty) {
-                        return self.call_value(v, &ps, &r, args, line);
+                        let t = self.var(v).ty.clone();
+                        let f = self.mk(line, t, ExprKind::Var(v));
+                        return self.call_value(f, &ps, &r, args, line);
                     }
                     // an object with __call__ (a torch module, a loss)
                     if self.find_method(&self.var(v).ty, "__call__").is_some() {
@@ -4033,6 +4035,10 @@ impl Front {
                     let is_method = self.p.classes[cid].method(m).is_some_and(|f| !self.p.funcs[f].property);
                     if !is_method {
                         let obj = self.expr(&c.func, None)?;
+                        // `b.on_click(x)`: a Callable field
+                        if let Ty::Func(ps, r) = self.norm(&obj.ty) {
+                            return self.call_value(obj, &ps, &r, args, line);
+                        }
                         if self.find_method(&obj.ty, "__call__").is_some() {
                             return self.call_object(obj, args, line);
                         }
@@ -4043,6 +4049,10 @@ impl Front {
             // `layers[0](x)`, `make()(x)`: an object with __call__
             f => {
                 let obj = self.expr(f, None)?;
+                // `pick("add")(2.0, 3.5)`, `ops[k](a, b)`: a Callable value
+                if let Ty::Func(ps, r) = self.norm(&obj.ty) {
+                    return self.call_value(obj, &ps, &r, args, line);
+                }
                 if self.find_method(&obj.ty, "__call__").is_some() {
                     return self.call_object(obj, args, line);
                 }
