@@ -30,6 +30,17 @@ pub fn ident(n: &str) -> String {
     }
 }
 
+/// A Rust `const` cannot be shadowed by a `let` or a parameter, so a constant
+/// with a lowercase name (`n = 10`, which a function may reuse as a local) is
+/// renamed out of the way: `n` → `C__n`.
+fn const_ident(n: &str) -> String {
+    if n.chars().any(|ch| ch.is_lowercase()) {
+        format!("C__{}", n)
+    } else {
+        ident(n)
+    }
+}
+
 fn rust_str(s: &str) -> String {
     let mut o = String::from("\"");
     for c in s.chars() {
@@ -418,7 +429,7 @@ pub fn generate(p: &Program, o: &Own, x: &Exc) -> Res<String> {
         if c.name.chars().any(|ch| ch.is_lowercase()) {
             out += "#[allow(non_upper_case_globals)]\n";
         }
-        out += &format!("const {}: {} = {};\n", ident(&c.name), t, code);
+        out += &format!("const {}: {} = {};\n", const_ident(&c.name), t, code);
     }
     if !p.consts.is_empty() {
         out += "\n";
@@ -2907,7 +2918,7 @@ impl<'a> FGen<'a> {
             K::Const(c) => {
                 let cst = &self.p.consts[*c];
                 let k = if cst.value.ty == Ty::Str { Kind::Ref } else { Kind::Val };
-                r(ident(&cst.name), k, ATOM)
+                r(const_ident(&cst.name), k, ATOM)
             }
             K::ToFloat(x) => {
                 if let K::Int(v) = x.kind {

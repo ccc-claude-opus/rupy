@@ -2520,7 +2520,9 @@ impl Front {
         match t {
             AExpr::Name(n) => {
                 let name = n.id.as_str();
-                if self.consts.contains_key(name) && self.lookup(name).is_none() {
+                // in a function an assignment makes a local, shadowing a constant (of
+                // this or another combined module) as in Python
+                if self.consts.contains_key(name) && self.lookup(name).is_none() && self.cur == self.p.main {
                     return err(line, format!("cannot assign to constant `{}`", name));
                 }
                 let found = self.lookup(name).filter(|v| !(self.var(*v).kind == VarKind::Bound && !self.active.contains(v)));
