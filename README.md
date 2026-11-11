@@ -237,11 +237,16 @@ same regex crate as the native backend, so a pattern matches exactly as it does 
 
 Generators work as in CPython, one item at a time: a generator is a frame object, and
 `next` reruns its code from the start, skipping to the `yield` it stopped at, with its
-locals loaded from the frame (as Emscripten's Asyncify does). A `yield` may not stand in
-`except`, `finally` or the `else` of a loop.
+locals loaded from the frame (as Emscripten's Asyncify does); a `yield` in `finally` code
+resumes on the path without an exception. A `Callable` is a closure (a function
+reference and the variables it captures); a nested function's `nonlocal` variables are
+copied in and back out at each call. `collections`, `heapq`, `bisect`, `json.dumps`,
+`os.path`, `time` and `@functools.cache` work as on the native backend; `open()`,
+`os.path.exists` and `os.remove` use the host's files.
 
-Not yet supported by the wasm backend: functions as values (lambdas work as `key=`
-arguments), `nonlocal`, `heapq`, exception fields, and `ruai.plot`.
+Not supported by the wasm backend: Rust crates and Python modules (the Python bridge),
+`ruai.plot`, and the package functions that need an operating system (`subprocess`,
+`os.listdir`, ...).
 
 ## Rust crates
 

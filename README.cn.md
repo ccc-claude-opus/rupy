@@ -123,9 +123,9 @@ def keep(xs: Own[list[int]]) -> None: ...           # Vec<i64>
 
 `random` 的随机数和 CPython 相同（Mersenne Twister 在主机里），`itertools` 按 CPython 的顺序生成 list，`re` 在 `rupy_lib.wasm` 里用和原生后端相同的 regex crate 匹配，结果和原生后端一样。
 
-generator 和 CPython 一样一次产生一项：generator 是一个 frame 对象，`next` 从头重跑它的代码，局部变量从 frame 读回，直接跳到上次停下的 `yield`（和 Emscripten 的 Asyncify 相同的做法）。`yield` 不能放在 `except`、`finally` 或循环的 `else` 里。
+generator 和 CPython 一样一次产生一项：generator 是一个 frame 对象，`next` 从头重跑它的代码，局部变量从 frame 读回，直接跳到上次停下的 `yield`（和 Emscripten 的 Asyncify 相同的做法）；`finally` 里的 `yield` 在没有异常的路径上恢复。`Callable` 是 closure（函数引用加上它捕获的变量）；嵌套函数的 `nonlocal` 变量在每次调用时复制进去、再复制回来。`collections`、`heapq`、`bisect`、`json.dumps`、`os.path`、`time` 与 `@functools.cache` 和原生后端相同；`open()`、`os.path.exists`、`os.remove` 用主机的文件。
 
-wasm 后端还不支持：把函数当值传递（lambda 当 `key=` 参数可以）、`nonlocal`、`heapq`、异常的自定义字段，以及 `ruai.plot`。`log`、`exp` 等超越函数用 JavaScript 的 `Math`，结果的最后一位可能和 CPython 不同。
+wasm 后端不支持：Rust crate 与 Python 模块（Python bridge）、`ruai.plot`，以及需要操作系统的包函数（`subprocess`、`os.listdir` 等）。`log`、`exp` 等超越函数用 JavaScript 的 `Math`，结果的最后一位可能和 CPython 不同。
 
 ## Rust crate
 

@@ -102,3 +102,61 @@ for x in count(2):
   assert.equal(r.error, undefined);
   assert.equal(r.out, "make 0\ngot 0\nmake 1\ngot 1\n");
 });
+
+test("functions as values: closures, callbacks in lists, dicts and dataclasses", async () => {
+  const main = `"""Functions as values: closures over locals, functions in lists and dicts, callbacks."""
+from dataclasses import dataclass
+from typing import Callable
+
+
+@dataclass
+class Button:
+    label: str
+    on_click: Callable[[str], str]
+
+
+def make_adder(n: int) -> Callable[[int], int]:
+    return lambda x: x + n
+
+
+def shout(s: str) -> str:
+    return s.upper() + "!"
+
+
+def whisper(s: str) -> str:
+    return s.lower() + "..."
+
+
+def apply_all(fs: list[Callable[[int], int]], x: int) -> list[int]:
+    return [f(x) for f in fs]
+
+
+def pick(name: str) -> Callable[[float, float], float]:
+    ops: dict[str, Callable[[float, float], float]] = {"add": lambda a, b: a + b, "mul": lambda a, b: a * b}
+    return ops[name]
+
+
+def main() -> None:
+    add3 = make_adder(3)
+    add10 = make_adder(10)
+    print(add3(1), add10(1), apply_all([add3, add10, lambda v: v * v], 4))
+    buttons = [Button("ok", shout), Button("cancel", whisper)]
+    for b in buttons:
+        click = b.on_click
+        print(b.label, click(b.label))
+    add = pick("add")
+    mul = pick("mul")
+    print(add(2.0, 3.5), mul(2.0, 3.5))
+    fs: list[Callable[[str], str]] = [shout, whisper, lambda s: s.strip()]
+    print([f("  Hi ") for f in fs])
+    prefix = ">> "
+    show: Callable[[int], str] = lambda n: prefix + str(n)
+    print(show(5))
+
+
+main()
+`;
+  const r = await output({ main: "main.py", files: { "main.py": main } });
+  assert.equal(r.error, undefined);
+  assert.equal(r.out, "4 11 [7, 14, 16]\nok OK!\ncancel cancel...\n5.5 7.0\n['  HI !', '  hi ...', 'Hi']\n>> 5\n");
+});

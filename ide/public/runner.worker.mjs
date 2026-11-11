@@ -5,7 +5,7 @@
 // in:  { id, op: "compile" | "run", project: { main, files: { path: text } }, stdin }
 // out: { id, type: "ready" } once, then for a request
 //      { id, type: "out", fd, text } …, { id, type: "file", path, text } for each file the
-//      program wrote (open() reads and writes project.files), and
+//      program wrote or removed (text null; open() reads and writes project.files), and
 //      { id, type: "done", error?, code?, bytes, compileMs, runMs }
 //      (error: { file, line, msg, hint }, line 0 when it has none)
 import { run } from "./rupy/rupy_wasm.mjs";

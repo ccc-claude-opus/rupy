@@ -35,7 +35,7 @@
 
 ## 風險
 
-* **子集限制。** 一般 Python 寫法常被拒絕；wasm 後端還沒有 `heapq`、把函式當值傳遞等（generator、`random`、`itertools`、`re` 已經支援），和 Colab 的經驗仍有差距。
+* **子集限制。** 一般 Python 寫法常被拒絕；wasm 後端和原生後端的差別只剩 Rust crate、Python bridge、`ruai.plot` 與需要作業系統的函式，但 rupy 子集本身和 Colab 的一般寫法仍有差距。
 * **前綴重跑的成本。** 前面的格子每次都要重算；真正保留狀態要改 rupy 核心。
 * **互動式 `input()`。** 同步等待輸入需要 SharedArrayBuffer + Atomics，也就需要 COOP/COEP 標頭，會影響從 CDN 載入 Monaco；目前用預先填好的「標準輸入」。
 * **瀏覽器版本。** 需要 WasmGC 與 wasm 例外處理。

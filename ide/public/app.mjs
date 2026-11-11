@@ -398,7 +398,7 @@ function append(text, cls) {
 // the files the running program wrote (path → text): to the workspace when it ends
 let written = null;
 
-/** Put the files a program wrote in the workspace; their names, for the status line. */
+/** Put the files a program wrote in the workspace (text null: it removed the file); their names, for the status line. */
 async function saveWritten(files) {
   const names = [];
   for (const [path, text] of files) {
@@ -410,6 +410,13 @@ async function saveWritten(files) {
       append(`\n[沒有存下 ${path}：它是開著的筆記本]\n`, "stderr");
       continue;
     }
+    if (text === null) {
+      if (await fs.get(path)) await fs.remove(path);
+      models.get(path)?.dispose();
+      models.delete(path);
+      names.push(path + "（已刪除）");
+      continue;
+    }
     await fs.put(path, text);
     names.push(path);
     const m = models.get(path);
@@ -419,7 +426,14 @@ async function saveWritten(files) {
       applyingRemote = false;
     }
   }
-  if (current && isSvg(current) && names.includes(current) && !svgSource) await openFile(current);
+  if (current && !(await fs.get(current))) {
+    // the program removed the open file
+    current = null;
+    closeView();
+    editor.setModel(null);
+    $("current").textContent = "—";
+    await renderFiles();
+  } else if (current && isSvg(current) && names.includes(current) && !svgSource) await openFile(current);
   else if (names.length) await renderFiles();
   return names;
 }
