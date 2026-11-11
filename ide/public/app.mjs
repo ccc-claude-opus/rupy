@@ -106,12 +106,21 @@ const isSvg = (path) => path.endsWith(".svg");
 const runnable = (path) => !!path && (path.endsWith(".py") || isNotebook(path));
 let svgSource = false; // a .svg file shows its text, not the picture
 
+// files picked for deleting together: ⌘/Ctrl + click toggles one, Shift + click a range
+const picked = new Set();
+let pickAnchor = null;
+
 async function renderFiles() {
   const ul = $("files");
+  // list first, then replace the rows at once: renders started by quick clicks do not interleave
+  const files = await fs.list();
   ul.replaceChildren();
-  for (const f of await fs.list()) {
+  const paths = files.map((f) => f.path);
+  for (const p of [...picked]) if (!paths.includes(p)) picked.delete(p);
+  for (const f of files) {
     const li = document.createElement("li");
     li.className = f.path === current ? "active" : "";
+    li.classList.toggle("picked", picked.has(f.path));
     li.title = f.path;
     const icon = document.createElement("span");
     icon.className = "icon";
@@ -124,10 +133,44 @@ async function renderFiles() {
     li.append(icon, name);
     if (user) li.append(actButton("⇪", "分享唯讀連結", () => shareFile(f.path)));
     li.append(ren, del);
-    li.onclick = () => openFile(f.path);
+    li.onclick = (e) => {
+      if (e.metaKey || e.ctrlKey) {
+        if (!picked.delete(f.path)) picked.add(f.path);
+        pickAnchor = f.path;
+      } else if (e.shiftKey) {
+        const a = paths.indexOf(pickAnchor ?? current);
+        const b = paths.indexOf(f.path);
+        picked.clear();
+        for (let i = Math.min(a < 0 ? b : a, b); i <= Math.max(a, b); i++) picked.add(paths[i]);
+      } else {
+        picked.clear();
+        pickAnchor = f.path;
+        return openFile(f.path);
+      }
+      renderFiles();
+    };
     ul.append(li);
   }
+  const bulk = $("delete-picked");
+  bulk.hidden = picked.size === 0;
+  bulk.textContent = `✕ ${picked.size}`;
+  bulk.setAttribute("aria-label", `刪除選取的 ${picked.size} 個檔案`);
 }
+
+$("delete-picked").onclick = () => deleteFiles([...picked]);
+// Delete / Backspace deletes the picked files (not while typing); Esc unpicks them
+document.addEventListener("keydown", (e) => {
+  if (!picked.size) return;
+  const t = document.activeElement;
+  if (t?.closest?.("input, textarea, [contenteditable], .monaco-editor")) return;
+  if (e.key === "Delete" || e.key === "Backspace") {
+    e.preventDefault();
+    deleteFiles([...picked]);
+  } else if (e.key === "Escape") {
+    picked.clear();
+    renderFiles();
+  }
+});
 
 function actButton(label, title, fn) {
   const b = document.createElement("button");
@@ -243,15 +286,24 @@ async function renameFile(path) {
 }
 
 async function deleteFile(path) {
-  if (!confirm(`刪除 ${path}？（無法復原）`)) return;
-  if (pendingSave?.path === path) {
-    clearTimeout(pendingSave.timer);
-    pendingSave = null;
+  return deleteFiles([path]);
+}
+
+async function deleteFiles(paths) {
+  if (!paths.length) return;
+  const ask = paths.length === 1 ? `刪除 ${paths[0]}？（無法復原）` : `刪除這 ${paths.length} 個檔案？（無法復原）\n\n${paths.join("\n")}`;
+  if (!confirm(ask)) return;
+  for (const path of paths) {
+    if (pendingSave?.path === path) {
+      clearTimeout(pendingSave.timer);
+      pendingSave = null;
+    }
+    await fs.remove(path);
+    models.get(path)?.dispose();
+    models.delete(path);
+    picked.delete(path);
   }
-  await fs.remove(path);
-  models.get(path)?.dispose();
-  models.delete(path);
-  if (current === path) {
+  if (paths.includes(current)) {
     current = null;
     closeView();
     const rest = await fs.list();
