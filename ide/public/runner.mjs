@@ -16,6 +16,7 @@ export class Runner {
         const job = this.jobs.get(data.id);
         if (!job) return;
         if (data.type === "out") job.onOutput?.(data.fd, data.text);
+        else if (data.type === "file") job.onFile?.(data.path, data.text);
         else if (data.type === "done") {
           this.jobs.delete(data.id);
           job.resolve(data);
@@ -26,13 +27,14 @@ export class Runner {
 
   /**
    * Compile (op "compile") or compile and run (op "run") `project`, { main, files:
-   * { path: text } } (main and the modules it imports); resolves with the "done" message.
+   * { path: text } } (main, the modules it imports, and the files it may read);
+   * onFile(path, text): a file the program wrote. Resolves with the "done" message.
    */
-  async request(op, project, { stdin = "", onOutput } = {}) {
+  async request(op, project, { stdin = "", onOutput, onFile } = {}) {
     await this.ready;
     const id = ++this.seq;
     return new Promise((resolve) => {
-      this.jobs.set(id, { resolve, onOutput });
+      this.jobs.set(id, { resolve, onOutput, onFile });
       this.worker.postMessage({ id, op, project, stdin });
     });
   }

@@ -29,12 +29,12 @@
 | M2 | Notebook：程式格與 Markdown 格（含 TeX）、前綴重跑、每格輸出、匯入匯出 `.ipynb` | ✓ |
 | M3 | 帳號（照 rucloud `examples/app-builder` 的 PBKDF2 + HMAC cookie）、自動存到 D1 + R2、唯讀分享連結 | ✓ |
 | M4 | 多檔專案：`examples/rupy_wasm.rs` 接受一組虛擬檔案（`import` 同專案的模組）、錯誤以 JSON 回傳檔案與行號（rupy 的錯誤沒有欄號） | ✓ |
-| M5 | 豐富輸出：在 `src/wasm/host.mjs` 加 `display()`，顯示 rstatistics graphics 的 SVG | |
+| M5 | 豐富輸出：印出的 SVG（rstatistics 的 `g.svg()`）顯示成圖並存進筆記本；wasm 後端支援 `open()`，程式可以讀寫工作區的檔案（`g.save("x.svg")`），`.svg` 檔開啟時顯示圖 | ✓ |
 | M6 | Durable Objects 即時協作、AI 助手（Workers AI / AI Gateway） | |
 
 ## 風險
 
-* **子集限制。** 一般 Python 寫法常被拒絕；wasm 後端還沒有 generator、`random`、`re`、`itertools`、檔案等，和 Colab 的經驗差距大。
+* **子集限制。** 一般 Python 寫法常被拒絕；wasm 後端還沒有 generator、`random`、`re`、`itertools` 等，和 Colab 的經驗差距大。
 * **前綴重跑的成本。** 前面的格子每次都要重算；真正保留狀態要改 rupy 核心。
 * **互動式 `input()`。** 同步等待輸入需要 SharedArrayBuffer + Atomics，也就需要 COOP/COEP 標頭，會影響從 CDN 載入 Monaco；目前用預先填好的「標準輸入」。
 * **瀏覽器版本。** 需要 WasmGC 與 wasm 例外處理。

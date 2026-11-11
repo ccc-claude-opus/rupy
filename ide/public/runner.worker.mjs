@@ -4,7 +4,9 @@
 //
 // in:  { id, op: "compile" | "run", project: { main, files: { path: text } }, stdin }
 // out: { id, type: "ready" } once, then for a request
-//      { id, type: "out", fd, text } … and { id, type: "done", error?, code?, bytes, compileMs, runMs }
+//      { id, type: "out", fd, text } …, { id, type: "file", path, text } for each file the
+//      program wrote (open() reads and writes project.files), and
+//      { id, type: "done", error?, code?, bytes, compileMs, runMs }
 //      (error: { file, line, msg, hint }, line 0 when it has none)
 import { run } from "./rupy/rupy_wasm.mjs";
 
@@ -61,7 +63,17 @@ onmessage = async ({ data: { id, op, project, stdin } }) => {
   const out = writer(id, 1), err = writer(id, 2);
   let code;
   try {
-    code = await run(r.wasm, { stdout: out.write, stderr: err.write, stdin: stdin ?? "" });
+    code = await run(r.wasm, {
+      stdout: out.write,
+      stderr: err.write,
+      stdin: stdin ?? "",
+      files: new Map(Object.entries(project.files)),
+      onFile: (path, text) => {
+        out.flush();
+        err.flush();
+        postMessage({ id, type: "file", path, text });
+      },
+    });
   } catch (e) {
     err.write(`\n${e?.stack ?? e}\n`);
     code = 1;

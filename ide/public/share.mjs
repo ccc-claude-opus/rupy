@@ -1,6 +1,7 @@
 // The read-only page of a share link (/s/<id>): a notebook's cells with their
 // saved outputs, or a program's text; "open a copy" goes to the IDE (/#import=<id>).
 import { parseNotebook } from "/nbformat.mjs";
+import { outputNode } from "/rich.mjs";
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls ?? "", textContent: text ?? "" });
@@ -27,12 +28,14 @@ try {
         cell.append(el("div", "count", c.count ? `[${c.count}]` : "[ ]"), el("pre", "code", c.source));
         if (c.outputs.length) {
           const out = el("pre", "cell-out");
-          for (const o of c.outputs) out.append(el("span", o.name === "stderr" ? "stderr" : "", o.text));
+          for (const o of c.outputs) out.append(outputNode(o));
           cell.append(out);
         }
       }
       doc.append(cell);
     }
+  } else if (data.path.endsWith(".svg")) {
+    doc.append(outputNode({ name: "svg", text: data.text }));
   } else {
     doc.append(el("pre", "code", data.text));
   }

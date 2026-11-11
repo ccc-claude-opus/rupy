@@ -35,7 +35,9 @@ button.run { background: var(--accent); color: var(--accent-text); border-color:
 .note { color: var(--muted); font-size: 12px; padding: 0 12px; }
 
 .editor-wrap { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--panel); }
-.tab { font-family: var(--mono); font-size: 12px; padding: 5px 12px; border-bottom: 1px solid var(--line); color: var(--muted); }
+.tab { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; padding: 5px 12px; border-bottom: 1px solid var(--line); color: var(--muted); }
+.tab #current { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab button { font-size: 12px; padding: 0 8px; }
 #editor { flex: 1; min-height: 0; }
 
 .panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-top: 1px solid var(--line); background: var(--panel); }
@@ -114,3 +116,9 @@ a.button.run { background: var(--accent); color: var(--accent-text); border-colo
 .share-cell { margin: 0 0 14px; }
 .share-cell .count { font: 11px var(--mono); color: var(--muted); margin-bottom: 2px; }
 pre.code { margin: 0; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; font: 13px/1.5 var(--mono); overflow-x: auto; white-space: pre; }
+
+/* pictures: a program's SVG output, and .svg files */
+img.plot { display: block; max-width: 100%; height: auto; margin: 4px 0; background: #fff; border-radius: 4px; }
+.cell-out img.plot, #output img.plot { max-width: 100%; max-height: 420px; width: auto; }
+.preview { flex: 1; min-height: 0; overflow: auto; padding: 16px; display: flex; justify-content: center; align-items: flex-start; }
+.preview img.plot { max-width: 100%; }

@@ -23,18 +23,19 @@
     <div class="side-head">
       <span>檔案</span>
       <span>
-        <button id="import" title="匯入 .py 或 .ipynb" aria-label="匯入檔案">匯入</button>
+        <button id="import" title="匯入程式、筆記本或資料檔" aria-label="匯入檔案">匯入</button>
         <button id="new-file" title="新增檔案" aria-label="新增檔案">＋</button>
       </span>
-      <input type="file" id="import-input" accept=".py,.ipynb" multiple hidden>
+      <input type="file" id="import-input" accept=".py,.ipynb,.txt,.csv,.tsv,.json,.md,.svg" multiple hidden>
     </div>
     <ul id="files"></ul>
     <p class="note" id="storage-note"></p>
   </nav>
   <section class="editor-wrap">
-    <div class="tab" id="current">—</div>
+    <div class="tab"><span id="current">—</span><button id="view-toggle" hidden title="切換圖片與原始碼"></button></div>
     <div id="editor"></div>
     <div id="notebook" hidden></div>
+    <div id="preview" class="preview" hidden></div>
   </section>
   <section class="panel">
     <div class="panel-tabs" role="tablist">

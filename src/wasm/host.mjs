@@ -715,7 +715,10 @@ function decodeResult(buf) {
  * Run a compiled program. `io.stdout` / `io.stderr` receive text; `io.stdin`
  * is the input text (or a function returning the next line, or null at the end).
  * `io.lib` is rupy_lib.wasm for programs that use packages implemented in Rust
- * (bytes, a Module, or a URL; default: next to this file). Returns the exit code.
+ * (bytes, a Module, or a URL; default: next to this file). `io.files` holds the
+ * files `open()` reads and writes: anything with get(path) → text | undefined and
+ * set(path, text), such as a Map (default: an empty Map); `io.onFile(path, text)`
+ * is told of each file written, when it is closed. Returns the exit code.
  */
 export async function run(bytes, io = {}) {
   const stdout = io.stdout ?? ((s) => console.log(s));
@@ -760,6 +763,73 @@ export async function run(bytes, io = {}) {
       return l.replace(/\r?\n$/, "");
     },
   };
+  // open files: handle → { path, text, at (read position), write, dirty };
+  // what is written reaches `files` when the file is closed (or the program ends)
+  const files = io.files ?? new Map();
+  const open = new Map();
+  let nextHandle = 3;
+  const file = (h, how) => {
+    const f = open.get(h);
+    if (!f) throw err("ValueError", "I/O operation on closed file.");
+    if (how === "r" && f.write) throw err("OSError", "not readable");
+    if (how === "w" && !f.write) throw err("OSError", "not writable");
+    return f;
+  };
+  const save = (f) => {
+    if (!f.dirty) return;
+    f.dirty = false;
+    files.set(f.path, f.text);
+    io.onFile?.(f.path, f.text);
+  };
+  const readLine = (f) => {
+    const i = f.text.indexOf("\n", f.at);
+    const end = i < 0 ? f.text.length : i + 1;
+    const line = f.text.slice(f.at, end);
+    f.at = end;
+    return line;
+  };
+  Object.assign(ops, {
+    open: (path, mode) => {
+      path = path.replace(/^(\.\/)+/, "");
+      const m = mode.split(":")[0][0];
+      let text = files.get(path);
+      if (m === "r" && text === undefined) throw err("FileNotFoundError", `[Errno 2] No such file or directory: '${path}'`);
+      if (m === "w") text = "";
+      const f = { path, text: text ?? "", at: 0, write: m !== "r", dirty: m !== "r" };
+      open.set(BigInt(nextHandle), f);
+      return BigInt(nextHandle++);
+    },
+    "file.read": (h) => {
+      const f = file(h, "r");
+      const s = f.text.slice(f.at);
+      f.at = f.text.length;
+      return s;
+    },
+    "file.readline": (h) => readLine(file(h, "r")),
+    "file.readlines": (h) => {
+      const f = file(h, "r");
+      const out = [];
+      while (f.at < f.text.length) out.push(readLine(f));
+      return out;
+    },
+    "file.write": (h, s) => {
+      const f = file(h, "w");
+      f.text += s;
+      f.dirty = true;
+      return BigInt(cps(s).length);
+    },
+    "file.writelines": (h, ...lines) => {
+      lines.pop(); // the count
+      for (const s of lines) ops["file.write"](h, s);
+      return null;
+    },
+    "file.close": (h) => {
+      const f = open.get(h);
+      if (f) save(f);
+      open.delete(h);
+      return null;
+    },
+  });
   for (const [k, f] of Object.entries(MATH)) ops[k] = f;
   for (const [k, f] of Object.entries(STR)) ops["str." + k] = f;
   const invoke = () => {
@@ -864,6 +934,8 @@ export async function run(bytes, io = {}) {
       stderr("Traceback (most recent call last):\nRuntimeError: " + e.message + "\n");
     }
     return 1;
+  } finally {
+    for (const f of open.values()) save(f); // written but not closed: as at exit
   }
 }
 
@@ -889,6 +961,10 @@ if (isMain) {
   };
   let input = null;
   const code = await run(fs.readFileSync(file), {
+    files: {
+      get: (p) => (fs.existsSync(p) ? fs.readFileSync(p, "utf8") : undefined),
+      set: (p, text) => fs.writeFileSync(p, text),
+    },
     stdout: (s) => {
       out += s;
       if (out.length > 65536) flush();

@@ -3,7 +3,11 @@
 // sees the cells above it by running them again). Before each code cell the
 // program prints a marker, RS i RS, which splits its output among the cells.
 
-/** A cell: { type: "code" | "markdown", source, outputs: [{ name: "stdout" | "stderr", text }], count }. */
+/**
+ * A cell: { type: "code" | "markdown", source, outputs, count }; an output is
+ * { name: "stdout" | "stderr", text }, or a picture { name: "svg" | "png", text }
+ * (an SVG document, or base64 PNG data from Jupyter).
+ */
 export function newCell(type = "code", source = "") {
   return { type, source, outputs: [], count: null };
 }
@@ -20,14 +24,18 @@ export function parseNotebook(text) {
     .map((c) => ({
       type: c.cell_type === "code" ? "code" : "markdown",
       source: joinText(c.source),
-      // stream outputs only; other kinds (from Jupyter) as their text/plain
+      // streams, pictures, and other kinds (from Jupyter) as their text/plain
       outputs: (c.outputs ?? [])
         .map((o) =>
           o.output_type === "stream"
             ? { name: o.name === "stderr" ? "stderr" : "stdout", text: joinText(o.text) }
             : o.output_type === "error"
               ? { name: "stderr", text: (o.traceback ?? [`${o.ename}: ${o.evalue}`]).join("\n") + "\n" }
-              : { name: "stdout", text: joinText(o.data?.["text/plain"]) },
+              : o.data?.["image/svg+xml"]
+                ? { name: "svg", text: joinText(o.data["image/svg+xml"]) }
+                : o.data?.["image/png"]
+                  ? { name: "png", text: joinText(o.data["image/png"]) }
+                  : { name: "stdout", text: joinText(o.data?.["text/plain"]) },
         )
         .filter((o) => o.text),
       count: c.cell_type === "code" ? c.execution_count ?? null : null,
@@ -45,7 +53,11 @@ export function serializeNotebook({ cells, metadata = {} }) {
       const cell = { cell_type: c.type, id: `cell-${i}`, metadata: {}, source: lines(c.source) };
       if (c.type === "code") {
         cell.execution_count = c.count;
-        cell.outputs = c.outputs.map((o) => ({ output_type: "stream", name: o.name, text: lines(o.text) }));
+        cell.outputs = c.outputs.map((o) =>
+          o.name === "svg" || o.name === "png"
+            ? { output_type: "display_data", data: { [o.name === "svg" ? "image/svg+xml" : "image/png"]: o.name === "svg" ? lines(o.text) : o.text, "text/plain": ["<Figure>"] }, metadata: {} }
+            : { output_type: "stream", name: o.name, text: lines(o.text) },
+        );
       }
       return cell;
     }),

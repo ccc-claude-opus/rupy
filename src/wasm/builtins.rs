@@ -438,6 +438,31 @@ impl<'a> W<'a> {
                 let t = self.exit_tag;
                 self.c().throw(t);
             }
+            // files live in the host (`io.files` of rupy_wasm.mjs); a file is the host's handle
+            "open" | "file.read" | "file.readline" | "file.readlines" | "file.close" | "file.write" | "file.writelines" => {
+                let ts = [Ty::Int, if name == "file.writelines" { Ty::list(Ty::Str) } else { Ty::Str }];
+                // every argument first: evaluating one may call the host, which takes the pushed ones
+                let mut held = vec![];
+                for (i, x) in a.iter().enumerate() {
+                    let t = if name == "open" { Ty::Str } else { ts[i.min(1)].clone() };
+                    let v = self.val(&t)?.unwrap();
+                    let l = self.fx.local(v);
+                    self.expr(x)?;
+                    self.c().local_set(l);
+                    held.push((l, t));
+                }
+                for (l, t) in held {
+                    self.c().local_get(l);
+                    self.host_arg(&t)?;
+                }
+                let ret = match name {
+                    "open" | "file.write" => Ty::Int,
+                    "file.readlines" => Ty::list(Ty::Str),
+                    "file.close" | "file.writelines" => Ty::None,
+                    _ => Ty::Str,
+                };
+                self.host_call(name, &ret)?;
+            }
             n => return unsupported(format!("`{}`", n)),
         }
         Ok(())

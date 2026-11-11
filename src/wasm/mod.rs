@@ -334,7 +334,7 @@ impl<'a> W<'a> {
             Ty::Func(..) => return unsupported("functions as values"),
             Ty::Gen(_) => return unsupported("generators"),
             Ty::Deque(_) => return unsupported("collections.deque"),
-            Ty::File => return unsupported("files"),
+            Ty::File => Val::I64, // the host's handle
             Ty::Pattern(_) | Ty::Match(_) => return unsupported("the re module"),
             Ty::Var(_) => return unsupported("an uninferred type"),
         }))

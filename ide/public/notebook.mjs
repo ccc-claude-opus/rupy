@@ -2,6 +2,7 @@
 // rendered Markdown (double-click to edit). Running cell k runs code cells
 // 0..k as one program (nbformat.mjs) and splits the output among them.
 import { parseNotebook, serializeNotebook, buildProgram, locate, outputSplitter, newCell } from "./nbformat.mjs";
+import { richSplitter, outputNode, isImage } from "./rich.mjs";
 import { formatError, markerMessage } from "./runner.mjs";
 
 let markdownModule = null;
@@ -243,7 +244,7 @@ export class NotebookView {
   // ------------------------------------------------------------ outputs
 
   showOutputs(item) {
-    item.out.replaceChildren(...item.cell.outputs.map((o) => el("span", o.name === "stderr" ? "stderr" : "", o.text)));
+    item.out.replaceChildren(...item.cell.outputs.map(outputNode));
     item.out.hidden = item.cell.outputs.length === 0;
     item.countEl.textContent = item.cell.count ? `[${item.cell.count}]` : "[ ]";
   }
@@ -253,12 +254,13 @@ export class NotebookView {
     if (!item?.out || !text) return;
     const outs = item.cell.outputs;
     const last = outs[outs.length - 1];
-    if (last && last.name === name) {
+    if (last && last.name === name && !isImage(last)) {
       last.text += text;
       item.out.lastChild.textContent += text;
     } else {
-      outs.push({ name, text });
-      item.out.append(el("span", name === "stderr" ? "stderr" : "", text));
+      const o = { name, text };
+      outs.push(o);
+      item.out.append(outputNode(o));
     }
     item.out.hidden = false;
   }
@@ -285,22 +287,27 @@ export class NotebookView {
       monaco.editor.setModelMarkers(it.editor.getModel(), "rupy", []);
     }
     const started = [];
+    const rich = new Map(); // cell → its richSplitter: the pictures in its output
     const split = outputSplitter((i, text) => {
       if (started[started.length - 1] !== i) {
-        const prev = this.items[started[started.length - 1]];
-        prev?.el.classList.remove("running");
+        const prev = started[started.length - 1];
+        this.items[prev]?.el.classList.remove("running");
+        rich.get(prev)?.flush();
         started.push(i);
         this.items[i].el.classList.replace("queued", "running");
+        rich.set(i, richSplitter((kind, s) => this.appendOutput(i, kind === "svg" ? "svg" : "stdout", s)));
       }
-      this.appendOutput(i, "stdout", text);
+      rich.get(i).feed(text);
     });
     const project = await this.opts.project(src);
     const r = ran.length
       ? await runner.request("run", project, {
           stdin: this.opts.stdin(),
+          onFile: this.opts.onFile,
           onOutput: (fd, text) => (fd === 1 ? split.feed(text) : this.appendOutput(split.current >= 0 ? split.current : ran[0], "stderr", text)),
         })
       : { type: "done", code: 0, compileMs: 0, runMs: 0, bytes: 0 };
+    for (const r of rich.values()) r.flush();
     if (r.error) this.showCompileError(r.error, starts, project.main);
     else if (r.stopped) this.appendOutput(split.current >= 0 ? split.current : ran[0], "stderr", "[已停止]\n");
     for (const i of ran) {

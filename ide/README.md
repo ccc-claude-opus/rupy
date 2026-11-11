@@ -15,7 +15,7 @@ node --test ide/test/*.test.mjs          # 筆記本邏輯 + API（API 測試會
 
 需要支援 WasmGC 與 wasm 例外處理的瀏覽器（Chrome 119+、Firefox 120+、Safari 18.2+）。
 
-## 目前功能（M0–M4）
+## 目前功能（M0–M5）
 
 * Monaco 編輯器（從 jsdelivr 載入），Python 語法上色，深色模式跟著系統。
 * 檔案存在瀏覽器的 IndexedDB；側欄可以新增、重新命名、刪除。第一次開會放入範例程式。
@@ -33,9 +33,11 @@ node --test ide/test/*.test.mjs          # 筆記本邏輯 + API（API 測試會
   * 兩邊都改過同一個檔案時，以伺服器的版本為準，本機的內容另存成 `名稱.conflict-<時間>.py`，不會遺失。
   * 登出會先同步，再刪掉這台電腦上該帳號的本機副本（檔案仍在伺服器）。
 * **分享**：登入後檔案旁的 ⇪ 產生唯讀連結 `/s/<id>`（當下內容的快照，之後修改要再分享一次）。分享頁顯示程式或筆記本（含輸出、Markdown、TeX），「在 IDE 開啟副本」會把它複製到自己的工作區。帳號選單可以列出與取消自己的分享。
-* 側欄「匯入」可以匯入 `.py` 與 `.ipynb`（Jupyter / Colab 的筆記本也行，只是多半用到 rupy 不支援的 Python）；工具列「下載」下載目前的檔案。
+* **圖形（M5）**：程式印出的 SVG 文件（以 `<?xml` 或 `<svg` 開頭的一行，到 `</svg>` 為止）會顯示成圖，例如 rstatistics 的 `print(g.svg())`；同一支程式在 CPython 下印出的是同樣的 SVG 文字。筆記本把圖存成 nbformat 的 `display_data`（`image/svg+xml`），從 Jupyter 匯入的 PNG 圖也會顯示。圖用 `<img>` 顯示，SVG 裡的程式不會執行。
+* **讀寫檔案（M5）**：`open()` 讀的是工作區裡的檔案（`open("data.csv")`），寫出的檔案（`g.save("hist.svg")`、`open("out.txt", "w")`）在程式結束後存進工作區，狀態列會列出寫了哪些檔。`.svg` 檔開啟時顯示圖，右上角可以切換成原始碼。其他文字檔（`.txt`、`.csv`、`.json` …）用編輯器開啟。
+* 側欄「匯入」可以匯入程式、筆記本與資料檔（`.py`、`.ipynb`、`.txt`、`.csv`、`.json`、`.svg` …）（Jupyter / Colab 的筆記本也行，只是多半用到 rupy 不支援的 Python）；工具列「下載」下載目前的檔案。
 
-**多檔專案**：執行或檢查時，工作區裡所有 `.py` 檔一起交給編譯器（`rupy.wasm` 的 `compile_project`），所以程式可以 `import geometry`、`from geometry import Point`（`geometry.py` 和主程式在同一個資料夾）。筆記本也一樣，它的程式當成和筆記本同一個資料夾的檔案。模組裡的錯誤標在模組那一行，主程式（或筆記本的第一個程式格）第一行會有一個警告指出是哪個檔案。被 import 的模組只能定義函式、類別和常數（rupy 的規則）。
+**多檔專案**：執行或檢查時，工作區裡所有檔案一起交給編譯器（`rupy.wasm` 的 `compile_project`），所以程式可以 `import geometry`、`from geometry import Point`（`geometry.py` 和主程式在同一個資料夾）。筆記本也一樣，它的程式當成和筆記本同一個資料夾的檔案。模組裡的錯誤標在模組那一行，主程式（或筆記本的第一個程式格）第一行會有一個警告指出是哪個檔案。被 import 的模組只能定義函式、類別和常數（rupy 的規則）。
 
 ## 結構
 
@@ -64,6 +66,7 @@ flowchart LR
 | `public/share.html`、`public/share.mjs` | 唯讀分享頁 |
 | `public/app.mjs` | 介面：檔案、編輯器、執行、輸出 |
 | `public/runner.mjs`、`public/runner.worker.mjs` | 在 Web Worker 編譯（`compile_project`，傳入整個工作區）與執行，停止時結束 Worker |
+| `public/rich.mjs` | 從輸出裡切出 SVG 文件，顯示成 `<img>` |
 | `public/fs.mjs` | IndexedDB 檔案存取（每個帳號一個資料庫；記錄版本、是否改過、刪除標記） |
 | `public/editor.mjs` | 載入 Monaco |
 | `public/notebook.mjs` | 筆記本介面：每格一個 Monaco、輸出、新增/移動/刪除格子 |
@@ -72,6 +75,7 @@ flowchart LR
 | `public/examples.mjs` | 範例程式（取自 `web/playground.mjs`）與範例筆記本 `intro.ipynb` |
 | `test/api.test.mjs` | API 測試：帳號、檔案版本與衝突、帳號隔離、分享（需要 `rucloud`） |
 | `test/project.test.mjs` | 多檔專案：import 模組、子資料夾、錯誤所在的檔案與行 |
+| `test/rich.test.mjs` | 圖形輸出的切分、筆記本存圖、`open()` 讀寫工作區、rstatistics 在 wasm 上畫圖 |
 | `test/nbformat.test.mjs` | `node --test ide/test/*.test.mjs`：用真的編譯器測筆記本（先跑 `ide/build.sh`） |
 
 後續的里程碑見 [doc/ide-plan.md](../doc/ide-plan.md)。
@@ -97,3 +101,5 @@ flowchart LR
 ```
 
 成功回傳 0，輸出是程式的 wasm；失敗回傳 1，輸出是 JSON `{"file", "line", "msg", "hint"}`（`line` 為 0 表示沒有行號，例如 wasm 後端不支援的功能）。Rust 這邊是 `rupy::wasm::compile_files`，模組從 `modules::Files`（磁碟或一組文字）讀取。
+
+編譯好的程式用 `rupy_wasm.mjs` 的 `run(bytes, io)` 執行。`io.files` 是 `open()` 讀寫的檔案，可以是任何有 `get(path)` 與 `set(path, text)` 的物件（例如 `Map`）。IDE 傳入整個工作區；`node rupy_wasm.mjs` 則直接讀寫磁碟。寫出的內容在檔案關閉或程式結束時寫回 `io.files`，並呼叫 `io.onFile(path, text)` 通知。支援文字模式的 `r`、`w`、`a`，以及 `read`、`readline`、`readlines`、`write`、`writelines`、`for line in f` 和 `with open(...) as f`，和原生後端相同。

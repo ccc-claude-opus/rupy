@@ -9,10 +9,11 @@ import { Runner, formatError, markerMessage } from "./runner.mjs";
 import { NotebookView, lineMarker } from "./notebook.mjs";
 import { parseNotebook, serializeNotebook, newCell } from "./nbformat.mjs";
 import { EXAMPLES, NOTEBOOK } from "./examples.mjs";
+import { richSplitter, outputNode } from "./rich.mjs";
 
 const $ = (id) => document.getElementById(id);
 const runBtn = $("run"), runAllBtn = $("run-all"), stopBtn = $("stop"), status = $("status"), output = $("output"), stdin = $("stdin");
-const editorEl = $("editor"), notebookEl = $("notebook");
+const editorEl = $("editor"), notebookEl = $("notebook"), previewEl = $("preview"), viewToggle = $("view-toggle");
 
 const store = {
   get(k) {
@@ -87,7 +88,7 @@ async function flushSave() {
 function modelFor(path, text) {
   let m = models.get(path);
   if (!m) {
-    m = monaco.editor.createModel(text, "python", monaco.Uri.file(path));
+    m = monaco.editor.createModel(text, undefined, monaco.Uri.file(path)); // the language from the extension
     models.set(path, m);
     m.onDidChangeContent(() => {
       if (applyingRemote) return;
@@ -99,6 +100,9 @@ function modelFor(path, text) {
 }
 
 const isNotebook = (path) => path.endsWith(".ipynb");
+const isSvg = (path) => path.endsWith(".svg");
+const runnable = (path) => !!path && (path.endsWith(".py") || isNotebook(path));
+let svgSource = false; // a .svg file shows its text, not the picture
 
 async function renderFiles() {
   const ul = $("files");
@@ -109,7 +113,7 @@ async function renderFiles() {
     li.title = f.path;
     const icon = document.createElement("span");
     icon.className = "icon";
-    icon.textContent = isNotebook(f.path) ? "▤" : "•";
+    icon.textContent = isNotebook(f.path) ? "▤" : isSvg(f.path) ? "◩" : f.path.endsWith(".py") ? "•" : "·";
     const name = document.createElement("span");
     name.className = "name";
     name.textContent = f.path;
@@ -139,7 +143,8 @@ function actButton(label, title, fn) {
 function closeView() {
   view?.dispose();
   view = null;
-  notebookEl.hidden = true;
+  notebookEl.hidden = previewEl.hidden = viewToggle.hidden = true;
+  previewEl.replaceChildren();
   editorEl.hidden = false;
   runAllBtn.hidden = true;
   $("output-tab").hidden = $("clear").hidden = false;
@@ -170,6 +175,7 @@ async function openFile(path) {
       onChange: () => saveLater(path, () => v.text()),
       onEdit: () => scheduleCheck(),
       onRunRequest: (upto) => go(upto),
+      onFile: (p, text) => written?.set(p, text),
       project: (src) => project(path + ".py", src), // the notebook's program, next to the modules
       markOther,
     });
@@ -180,12 +186,25 @@ async function openFile(path) {
       v.dispose();
       notebookEl.textContent = `無法讀取 ${path}：${e.message}`;
     }
+  } else if (isSvg(path) && !svgSource) {
+    editor.setModel(null);
+    editorEl.hidden = true;
+    previewEl.hidden = false;
+    previewEl.replaceChildren(outputNode({ name: "svg", text: f.text }));
   } else {
     editor.setModel(modelFor(path, f.text));
   }
+  viewToggle.hidden = !isSvg(path);
+  viewToggle.textContent = svgSource ? "看圖" : "原始碼";
+  runBtn.disabled = runner.busy || !runnable(path);
   await renderFiles();
   scheduleCheck(0);
 }
+
+viewToggle.onclick = () => {
+  svgSource = !svgSource;
+  if (current) openFile(current);
+};
 
 function askName(message, initial) {
   let name = prompt(message, initial)?.trim();
@@ -273,9 +292,10 @@ async function uniqueName(name) {
 $("download").onclick = async () => {
   if (!current) return;
   await flushSave();
-  const text = view ? view.text() : editor.getValue();
+  const text = view ? view.text() : editor.getModel() ? editor.getValue() : (await fs.get(current)).text;
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([text], { type: isNotebook(current) ? "application/x-ipynb+json" : "text/x-python" }));
+  const type = isNotebook(current) ? "application/x-ipynb+json" : isSvg(current) ? "image/svg+xml" : current.endsWith(".py") ? "text/x-python" : "text/plain";
+  a.href = URL.createObjectURL(new Blob([text], { type }));
   a.download = current.split("/").pop();
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
@@ -296,22 +316,22 @@ async function check() {
   if (checker.busy) checker.stop(); // a compile that takes too long: start over
   if (view) return view.check(checker);
   const model = editor.getModel();
-  if (!model) return;
+  if (!model || !current?.endsWith(".py")) return;
   const main = current;
   const r = await checker.request("compile", await project(main));
   if (seq !== checkSeq || r.stopped || model.isDisposed()) return;
   showErrors(model, main, r.error);
 }
 
-/** The workspace's programs ({ path: text }), with the open editors' text. */
+/** The workspace's files ({ path: text }: modules to import, data to open()), with the open editors' text. */
 async function projectFiles() {
   const files = {};
-  for (const f of await fs.list()) if (f.path.endsWith(".py")) files[f.path] = f.text;
+  for (const f of await fs.list()) files[f.path] = f.text;
   for (const [p, m] of models) if (!m.isDisposed()) files[p] = m.getValue();
   return files;
 }
 
-/** What the compiler gets: `main` and every program of the workspace (the modules it may import). */
+/** What the compiler gets: `main` and every file of the workspace (the modules it may import). */
 async function project(main, text) {
   const files = await projectFiles();
   if (text !== undefined) files[main] = text;
@@ -348,7 +368,7 @@ const runner = new Runner();
 
 function append(text, cls) {
   const last = output.lastChild;
-  if (last && last.className === (cls ?? "")) last.textContent += text;
+  if (last?.tagName === "SPAN" && last.className === (cls ?? "")) last.textContent += text;
   else {
     const span = document.createElement("span");
     span.className = cls ?? "";
@@ -358,9 +378,39 @@ function append(text, cls) {
   output.scrollTop = output.scrollHeight;
 }
 
+// the files the running program wrote (path → text): to the workspace when it ends
+let written = null;
+
+/** Put the files a program wrote in the workspace; their names, for the status line. */
+async function saveWritten(files) {
+  const names = [];
+  for (const [path, text] of files) {
+    if (!/^[\w.\-]+(\/[\w.\-]+)*$/.test(path) || path.split("/").includes("..")) {
+      append(`\n[沒有存下 ${path}：檔名只能用英數字、底線、點、減號和 /]\n`, "stderr");
+      continue;
+    }
+    if (path === current && view) {
+      append(`\n[沒有存下 ${path}：它是開著的筆記本]\n`, "stderr");
+      continue;
+    }
+    await fs.put(path, text);
+    names.push(path);
+    const m = models.get(path);
+    if (m && !m.isDisposed() && m.getValue() !== text) {
+      applyingRemote = true;
+      m.setValue(text);
+      applyingRemote = false;
+    }
+  }
+  if (current && isSvg(current) && names.includes(current) && !svgSource) await openFile(current);
+  else if (names.length) await renderFiles();
+  return names;
+}
+
 /** Run the open program, or the notebook's cells 0..upto (default: the active cell). */
 async function go(upto) {
-  if (runner.busy || !current) return;
+  if (runner.busy || !runnable(current)) return;
+  written = new Map();
   runBtn.disabled = runAllBtn.disabled = true;
   stopBtn.disabled = false;
   status.textContent = `${current} 執行中…`;
@@ -372,22 +422,30 @@ async function go(upto) {
     showPane("output");
     output.replaceChildren();
     const main = current;
+    // an SVG document printed is shown as a picture
+    const rich = richSplitter((kind, s) => (kind === "svg" ? output.append(outputNode({ name: "svg", text: s })) : append(s)));
     r = await runner.request("run", await project(main), {
       stdin: stdin.value,
-      onOutput: (fd, text) => append(text, fd === 2 ? "stderr" : ""),
+      onOutput: (fd, text) => (fd === 2 ? append(text, "stderr") : rich.feed(text)),
+      onFile: (p, text) => written.set(p, text),
     });
+    rich.flush();
     if (r.stopped) append("\n[已停止]\n", "stderr");
     else if (r.error) {
       append(formatError(r.error) + "\n", "stderr");
       showErrors(model, main, r.error);
     }
   }
-  runBtn.disabled = runAllBtn.disabled = false;
+  const saved = await saveWritten(written);
+  written = null;
+  runBtn.disabled = !runnable(current);
+  runAllBtn.disabled = false;
   stopBtn.disabled = true;
   const cells = view ? `${r.cells} 格 · ` : "";
+  const files = saved.length ? ` · 寫入 ${saved.join("、")}` : "";
   if (r.stopped) status.textContent = `${current}：已停止`;
   else if (r.error) status.textContent = `編譯錯誤（${r.compileMs.toFixed(0)} ms）`;
-  else status.textContent = `${cells}編譯 ${r.compileMs.toFixed(0)} ms（${r.bytes} bytes）· 執行 ${r.runMs.toFixed(0)} ms · 結束碼 ${r.code}`;
+  else status.textContent = `${cells}編譯 ${r.compileMs.toFixed(0)} ms（${r.bytes} bytes）· 執行 ${r.runMs.toFixed(0)} ms · 結束碼 ${r.code}${files}`;
 }
 
 runBtn.onclick = () => go();
@@ -448,6 +506,8 @@ async function applyRemote(paths) {
       $("current").textContent = "—";
     } else if (view) {
       if (!runner.busy && view.text() !== f.text) await openFile(current);
+    } else if (!editor.getModel()) {
+      await openFile(current); // a picture
     } else {
       const m = models.get(current);
       if (m && m.getValue() !== f.text) {
@@ -560,6 +620,7 @@ const start = files.find((f) => f.path === startPath) ?? files[0];
 if (start) await openFile(start.path);
 else await renderFiles();
 await runner.ready;
-runBtn.disabled = runAllBtn.disabled = false;
+runBtn.disabled = !runnable(current);
+runAllBtn.disabled = false;
 status.textContent = "就緒（Ctrl/⌘ + Enter 執行）";
 sync?.schedule(0);

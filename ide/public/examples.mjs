@@ -97,6 +97,22 @@ print(rng.random(3))
 ps = primes(200000)
 print(len(ps), ps[:10], ps[-3:])
 `,
+  "Plot": `# Graphics in R's style (rstatistics): a printed SVG shows as a picture,
+# and g.save() writes a file to the workspace.
+import rstatistics as r
+
+x = [1.0, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 6.0, 7.0, 8.0, 9.0]
+y = [1.2, 1.4, 2.1, 1.9, 2.3, 1.7, 1.5, 2.2, 2.9, 3.1, 3.4, 3.8]
+
+g = r.Graphics(6.0, 4.5)
+g.plot(x, y, main="x versus y", xlab="x", ylab="y")
+print(g.svg())
+
+g = r.Graphics(6.0, 4.5)
+g.boxplot(x, main="Box plot of x", xlab="x", ylab="")
+g.save("boxplot.svg")
+print("wrote boxplot.svg")
+`,
 };
 
 // A notebook: text with TeX, and code cells that use the cells above them.
@@ -111,9 +127,14 @@ export const NOTEBOOK = {
 文字格可以寫 TeX，例如 $\\sum_{i=1}^{n} i^2 = \\frac{n(n+1)(2n+1)}{6}$。點兩下編輯。`,
     },
     { type: "code", source: `def squares(n: int) -> list[int]:\n    return [i * i for i in range(1, n + 1)]\n` },
-    { type: "code", source: `n = 10\nxs = squares(n)\nprint(xs)\nprint(sum(xs), n * (n + 1) * (2 * n + 1) // 6)\n` },
+    { type: "code", source: `last_n = 10\nxs = squares(last_n)\nprint(xs)\nprint(sum(xs), last_n * (last_n + 1) * (2 * last_n + 1) // 6)\n` },
     { type: "markdown", source: "## NumPy\n\n$A$ 是 $3 \\times 4$ 的矩陣，$A^\\top A$ 是 $4 \\times 4$。" },
     { type: "code", source: `import numpy as np\n\na = np.arange(12).reshape((3, 4))\nprint(a.T @ a)\n` },
+    { type: "markdown", source: "## 圖形\n\n印出 SVG（rstatistics 的 `g.svg()`）就會顯示成圖，也會存在筆記本裡。" },
+    {
+      type: "code",
+      source: `import rstatistics as r\n\nx = [4.2, 5.1, 3.9, 6.3, 5.5, 4.8, 5.0, 6.8, 4.4, 5.9, 5.2, 4.6]\ng = r.Graphics(6.0, 4.0)\ng.hist(x, main="Histogram of x", xlab="x", ylab="Frequency")\nprint(g.svg())\n`,
+    },
   ].map((c) => ({ ...c, outputs: [], count: null })),
   metadata: {},
 };
