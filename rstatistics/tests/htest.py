@@ -35,6 +35,9 @@ print(r.wilcox_test(x, y, paired=True, data_name="x and y"))
 print(r.ks_test(x, y, data_name="x and y"))
 print(r.ks_test(x, y, exact=False, data_name="x and y"))
 print(r.ks_test(x, y, alternative="greater", data_name="x and y"))
+u = [1.34, 0.18, 1.29, -1.69, -0.82, -0.86, 0.1, -0.38, 0.72, -1.8, -0.66, -0.62, -0.08, 0.44, 1.97, -0.6, -0.55, 0.7, -0.16, 1.35]
+v = [-0.72, 1.41, -0.96, 2.41, 0.48, 0.12, -0.05, 1.24, 0.88, 0.18, 0.51, -0.14, -0.61, 0.53, 1.07, -0.02, 0.59, -0.32, -0.45, 0.3]
+print(r.ks_test(u, v, exact=False, data_name="u and v"))
 print(r.shapiro_test(x, data_name="x"))
 pv = [0.001, 0.008, 0.039, 0.041, 0.042, 0.06, 0.074, 0.205, 0.212, 0.216]
 for m in ["holm", "hommel", "BH", "BY", "bonferroni"]:

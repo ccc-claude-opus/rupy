@@ -1134,7 +1134,7 @@ def _kolmogorov_limit(x: float, lower: bool, tol: float) -> float:
         while k < k_max:
             s += math.exp(float(k * k) * z - w)
             k += 2
-        p = s / 2.5066282746310002
+        p = s * 2.5066282746310002
         if not lower:
             p = 1.0 - p
         return p

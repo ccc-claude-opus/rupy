@@ -219,6 +219,13 @@ D^+ = 0, p-value = 1
 alternative hypothesis: the CDF of x lies above that of y
 
 
+	Asymptotic two-sample Kolmogorov-Smirnov test
+
+data:  u and v
+D = 0.25, p-value = 0.5596
+alternative hypothesis: two-sided
+
+
 	Shapiro-Wilk normality test
 
 data:  x
