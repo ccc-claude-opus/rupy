@@ -113,6 +113,16 @@ def keep(xs: Own[list[int]]) -> None: ...           # Vec<i64>
 
 代码和注解矛盾时（例如修改 `Ref[...]`）会报错。
 
+## WebAssembly
+
+`rupy wasm FILE.py [-o OUT.wasm]` 不经过 Rust，直接把程序编译成 WebAssembly：一个 WasmGC 模块（对象、list、dict、set、tuple、字符串用 GC 的 struct 与 array；Python 的异常用 wasm 异常），加上运行它的 JavaScript 主机 `rupy_wasm.mjs`，可以在浏览器（`run(bytes, {stdout, stderr, stdin})`）或 Node.js 22 以上（`node rupy_wasm.mjs OUT.wasm`）运行。`rupy wasm --run FILE.py` 编译后直接运行，`rupy test --wasm` 把能编译的程序和 CPython 对照。
+
+编译器本身也能编成 `wasm32-unknown-unknown`（`examples/rupy_wasm.rs`），所以 `web/` 的 playground 与 [rupy IDE](ide/README.md) 都在浏览器里编译 rupy。用 Rust 实现的包（numpy、sklearn 等）放在另一个模块 `rupy_lib.wasm`，程序需要时才加载。
+
+文本文件可以用：`open()` 读写主机的 `io.files`（任何有 `get(path)` 与 `set(path, text)` 的对象，例如 `Map`；Node.js 下直接读写磁盘），所以网页可以把文件交给程序，再拿回它写出的文件。rupy IDE 就是这样：`open("data.csv")` 读工作区的文件，rstatistics 的 `g.save("hist.svg")` 把图存进工作区。
+
+wasm 后端还不支持：generator、把函数当值传递（lambda 当 `key=` 参数可以）、`nonlocal`、`re`、`heapq`、`itertools`、`random`、异常的自定义字段，以及 `ruai.plot`。`log`、`exp` 等超越函数用 JavaScript 的 `Math`，结果的最后一位可能和 CPython 不同。
+
 ## Rust crate
 
 `from rust.CRATE import Name` 使用 Rust crate。声明来自 stub 档 `CRATE.pyi`，依序在
@@ -138,6 +148,88 @@ CRATE[@VERSION]` 会从 crate 的 rustdoc JSON 产生 stub。`from rust import i
 `None`）；函数引发的异常会在 Python 中以相同类引发；`print` 写到 Python 的
 `sys.stdout`。`tests/pyo3/run.sh` 检查 import 这个模块印出的内容和 import 原本的
 Python 档相同。
+
+## 示例：包与 `ruai agent`
+
+### LLM agent 团队（`ruai agent`）
+
+```bash
+ruai agent init                                   # 在当前目录建立 .agge/（设置、agent、graph、记录）
+ruai agent model add glm nvidia z-ai/glm-5.3-flash   # provider：openai、nvidia、openrouter、deepseek、groq、gemini、ollama、lmstudio、anthropic
+ruai agent chat --team code                       # 与 lead 对话，lead 以 <delegate> 分派给 architect / coder / tester / reviewer
+ruai agent ask -y "建立 hello.py 并运行"            # 单次任务：agent 以文字标签调用工具（读写文件、搜索、shell）
+ruai agent book "Git 入门" --chapters 3 -o gitBook   # 大纲 → 各章（map 节点）→ 总编辑
+ruai agent run brainstorm "如何设计缓存层" -M merge=claude
+```
+
+`ruai agent` 是 [agge](src/agent/README.md)（约 2,500 行的 Python）以 rupy 改写后翻译成 Rust、编进 `ruai-agent` 可执行文件（`cargo install rupy`；ruai 遇到 `ruai agent` 会运行 `ruai-agent`），不需要 Python 或 cargo。同一份源代码（`src/agent/*.py`）也能直接以 CPython 运行；`tests/agent.rs` 用同一串命令（含一个假的 OpenAI / Anthropic 流服务器）对比两者的输出逐字相同，并检查嵌入的翻译 `src/agent/agent_gen.rs` 是最新的。与原版的差异：并行的 delegate、graph 节点与 map 项改为依次执行；聊天界面没有 readline 历史与补全。
+
+### rupy 的 numpy
+
+```python
+import numpy as np
+
+rng = np.random.default_rng(0)
+x = rng.random((50, 3))
+y = x @ np.array([2.0, -1.0, 0.5]) + 0.3
+w = np.zeros(3)
+for _ in range(2000):
+    err = x @ w - y
+    w = w - 0.5 * (x.T @ err) / x.shape[0]
+print(np.round(w, 3), x[x[:, 0] > 0.9].shape, round(float(np.abs(x @ w - y).mean()), 6))
+```
+
+`import numpy as np` 在 rupy 中是以 Rust 实现的 NumPy 子集（`src/pyrt/lib/numpy/`）：float64 / int64 / bool 数组、NumPy 2 的类型提升与广播、切片是共享内存的 view、布尔掩码与索引数组、沿轴的归约（`sum` 采用 NumPy 的 pairwise 求和顺序）、`linalg`、与 NumPy 逐位相同的 `random.default_rng`；`print` / `repr` 与 NumPy 的 `arrayprint` 逐字相同。同一个程序用 CPython 运行时就是真正的 NumPy，`tests/corpus/numpy/` 逐个对比。因为 rupy 是静态类型：`a[i]` 与归约的结果是 0 维数组（NumPy scalar），需要 Python float 时写 `float(a.sum())`；`a.shape` 可索引但不能解包；dtype 用字符串（`dtype="int64"`）。浮点矩阵乘法依次求和，可能与 NumPy 的 BLAS 在最后一位不同。
+
+### rupy 的 sklearn
+
+```python
+from sklearn.datasets import load_iris
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+
+iris = load_iris()
+Xtr, Xte, ytr, yte = train_test_split(iris.data, iris.target, test_size=0.3, random_state=42)
+sc = StandardScaler().fit(Xtr)
+model = LogisticRegression().fit(sc.transform(Xtr), ytr)
+print(model, model.score(sc.transform(Xte), yte))
+```
+
+`from sklearn.X import Y` 在 rupy 中是以 Rust 实现、建立在 numpy 数组上的 scikit-learn 子集（`src/pyrt/lib/sklearn/`）：`LinearRegression`、`Ridge`、`LogisticRegression`、`KNeighborsClassifier` / `Regressor`、`GaussianNB`、`KMeans`、`PCA`、`StandardScaler`、`MinMaxScaler`、`train_test_split`、常用指标与 `load_iris`。算法遵循 scikit-learn（相同的中心化、求解器的最佳解、PCA 的正负号惯例、`train_test_split` 用同样的 `RandomState` 随机数，所以切分完全相同），`tests/corpus/sklearn/` 用真正的 scikit-learn 对照输出。差异：scikit-learn 提前停止的迭代求解器（lbfgs）只在其允许误差内相同；k-NN 距离刚好相等时可能选到不同的邻居；`KMeans` 需要给初始中心（`init=数组`）；`target_names` 是 list。
+
+### rupy 的 gymnasium 与 torch
+
+```python
+import gymnasium as gym
+import torch
+import torch.nn as nn
+
+torch.manual_seed(0)
+policy = nn.Sequential(nn.Linear(4, 32), nn.Tanh(), nn.Linear(32, 2))
+env = gym.make("CartPole-v1")
+obs, info = env.reset(seed=42)
+logits = policy(torch.from_numpy(obs))
+obs, reward, terminated, truncated, info = env.step(int(logits.argmax()))
+print(policy, logits, obs, reward)
+```
+
+`import gymnasium as gym` 是 `ruai::world` 的环境套上 Gymnasium 的 Python API（观测值是 float32 的 numpy 数组，与 Gymnasium 逐位相同）；`import torch` 是建立在 ruai nn 引擎上的 PyTorch 子集：autograd、`nn.Linear` 等模块、`nn.Sequential`、损失函数、`optim.SGD` / `Adam`、`torch.no_grad()`。`torch.manual_seed` 复现 PyTorch 的随机数生成器（MT19937），所以 `rand`、`randn` 与 `nn.Linear` 的初始权重都与 PyTorch 相同；张量与模块的打印格式也一样。`tests/corpus/gymnasium/`、`tests/corpus/torch/` 用真正的 Gymnasium 与 PyTorch 对照（训练循环在 PyTorch 默认的 4 位小数下相同）。差异：模型用 `nn.Sequential` 或持有各层的一般类（不能继承 `nn.Module`），`parameters()` 返回 list；dtype 在 rupy 中是字符串；矩阵乘积与逐元素函数可能与 PyTorch 的 BLAS / 向量化实现在最后一位不同。
+
+### rupy 的 rstatistics（R 的概率统计）
+
+```python
+import rstatistics as r
+
+x = [5.1, 4.9, 6.2, 5.8, 6.0, 5.5, 5.3, 6.1]
+print(r.t_test(x, mu=5.0))
+print(r.summary(x))
+print(r.qt(0.975, 7))
+g = r.set_seed(42)
+print(r.print_vector(g.rnorm(5)))
+```
+
+`import rstatistics as r` 是 R 的概率统计函数：17 种分布的 `d` / `p` / `q`、`set_seed` 之后与 R 相同的随机数（Mersenne-Twister、反函数法的正态随机数、`sample`；所有分布的随机数都与 R 的 `src/nmath` 一位不差）、`t_test`、`var_test`、`chisq_test`、`binom_test`、`prop_test`、`cor_test`、非参数检验（`wilcox_test`、`ks_test`、`shapiro_test`、`fisher_test`、`kruskal_test`）、`p_adjust`、`table`、线性模型（`lm`、`anova`、`aov`、`predict`）、`summary`、`quantile`（九种）等，打印格式与 R 一字不差；还有 R 绘图的样子（`graphics()` 打开一个写入 SVG 的设备，布局与 R 相同：`hist`、`density`、`boxplot`、`qqnorm`、`ecdf`、`curve`、`barplot`、`plot`）。名称沿用 R，`.` 改成 `_`（`t.test` → `t_test`、`lower.tail` → `lower_tail`）。rstatistics 是用 rupy 本身写成的包（`rstatistics/`，在 PyPI 上是纯 Python、无依赖，需要 Python 3.13 以上），rupy 把它的源代码和程序一起编译，所以 Rust 与 wasm 后端都能用。`rstatistics/tests/run.py` 与 R 4.6 对照：打印结果相同，分布函数的相对误差在 1e-12 内。
 
 ## 测试
 
