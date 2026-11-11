@@ -121,7 +121,9 @@ def keep(xs: Own[list[int]]) -> None: ...           # Vec<i64>
 
 文字檔可以用：`open()` 讀寫主機的 `io.files`（任何有 `get(path)` 與 `set(path, text)` 的物件，例如 `Map`；Node.js 下直接讀寫磁碟），所以網頁可以把檔案交給程式，再拿回它寫出的檔案。rupy IDE 就是這樣：`open("data.csv")` 讀工作區的檔案，rstatistics 的 `g.save("hist.svg")` 把圖存進工作區。
 
-wasm 後端還不支援：generator、把函式當值傳遞（lambda 當 `key=` 參數可以）、`nonlocal`、`re`、`heapq`、`itertools`、`random`、例外的自訂欄位，以及 `ruai.plot`。`log`、`exp` 等超越函數用 JavaScript 的 `Math`，結果的最後一位可能和 CPython 不同。
+`random` 的亂數和 CPython 相同（Mersenne Twister 在主機裡），`itertools` 照 CPython 的順序產生 list，`re` 在 `rupy_lib.wasm` 裡用和原生後端相同的 regex crate 比對，結果和原生後端一樣。
+
+wasm 後端還不支援：generator、把函式當值傳遞（lambda 當 `key=` 參數可以）、`nonlocal`、`heapq`、例外的自訂欄位，以及 `ruai.plot`。`log`、`exp` 等超越函數用 JavaScript 的 `Math`，結果的最後一位可能和 CPython 不同。
 
 ## Rust crate
 

@@ -46,7 +46,7 @@ pub const LIB_MODULES: &[(&str, &str)] = &[
 
 /// The runtime features of a program's packages that `rupy_lib.wasm` has.
 pub fn lib_has(feature: &str) -> bool {
-    matches!(feature, "pyrt/numpy" | "pyrt/sklearn" | "pyrt/gymnasium" | "pyrt/torch")
+    matches!(feature, "pyrt/numpy" | "pyrt/sklearn" | "pyrt/gymnasium" | "pyrt/torch" | "pyrt/re")
 }
 
 /// The name the bridge knows package function `f` by: its class, name, Rust
@@ -248,6 +248,7 @@ pub fn generate() -> Result<LibSources, String> {
         dispatch += &arm(i, s, ptys, *result, &p, &class_home);
     }
     dispatch += &format!("        {:?} => index(d, e, h),\n", INDEX_KEY);
+    dispatch += "        k if k.starts_with(\"@re.\") => re_call(k, d, e),\n";
     // the classes whose objects cross the bridge (an array may be an index)
     let mut objs: Vec<String> = vec![];
     for (i, s) in specs.iter().enumerate() {

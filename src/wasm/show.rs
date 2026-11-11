@@ -240,6 +240,12 @@ impl<'a> W<'a> {
                         None => return unsupported(format!("printing a `{}` without __str__ / __repr__", cl.name)),
                     }
                 }
+                Ty::Pattern(_) | Ty::Match(_) => {
+                    // the host's handle: `re.compile('...')`, `<re.Match object; ...>`
+                    w.c().local_get(0);
+                    w.host_arg(&Ty::Int)?;
+                    w.host_call(if matches!(t, Ty::Match(_)) { "re.m_repr" } else { "re.p_repr" }, &Ty::Str)?;
+                }
                 t => return unsupported(format!("str() of {:?}", t)),
             }
             Ok(vec![sref])

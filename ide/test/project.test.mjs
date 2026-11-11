@@ -66,3 +66,21 @@ test("a module with top-level statements is rejected", () => {
   assert.equal(error.file, "u.py");
   assert.match(error.msg, /may only define/);
 });
+
+test("random, itertools and re run in the browser, as in CPython", async () => {
+  const main = `import random
+import re
+from itertools import combinations
+
+random.seed(7)
+print(random.randint(1, 100), random.choice(["a", "b", "c"]))
+print(list(combinations("abc", 2)))
+m = re.search(r"(\\w+)@(\\w+)", "mail: ann@example")
+if m is not None:
+    print(m.group(1), m.span(2))
+print(re.sub(r"\\d", "#", "a1b22"))
+`;
+  const r = await output({ main: "main.py", files: { "main.py": main } });
+  assert.equal(r.error, undefined);
+  assert.equal(r.out, "42 a\n[('a', 'b'), ('a', 'c'), ('b', 'c')]\nann (10, 17)\na#b##\n");
+});

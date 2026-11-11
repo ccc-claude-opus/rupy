@@ -424,6 +424,9 @@ impl<'a> W<'a> {
                 self.c().call(f);
             }
             n if n.starts_with("math.") => self.math_fn(&n[5..], a)?,
+            n if n.starts_with("random.") => self.random_fn(n, a, e)?,
+            n if n.starts_with("itertools.") => self.itertools_fn(n, a, e)?,
+            n if n.starts_with("re.") => self.re_fn(n, a, e)?,
             n if n.starts_with("list.") => self.list_method(&n[5..], a, e)?,
             n if n.starts_with("dict.") => self.dict_method(&n[5..], a, e)?,
             n if n.starts_with("set.") => self.set_method(&n[4..], a)?,

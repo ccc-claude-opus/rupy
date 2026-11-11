@@ -159,6 +159,85 @@ fn index(d: &mut Dec, e: &mut Enc, h: &mut Handles) -> Result<(), PyErr> {
     Ok(())
 }
 
+/// `@re.<op>`: the `re` module (rupy's `pyrt::re`, on the regex crate) for the
+/// wasm backend. The first token is the pattern in regex syntax (the
+/// translator converted it); a match goes out as its groups' (start, end, text)
+/// (-1, -1 when the group is not in it) and its named groups.
+fn re_call(key: &str, d: &mut Dec, e: &mut Enc) -> Result<(), PyErr> {
+    use rupy::pyrt::re;
+    fn put(e: &mut Enc, m: &re::Match) {
+        let (groups, names) = m.parts();
+        e.int(groups.len() as i64);
+        for g in groups {
+            match g {
+                Some((a, b, t)) => {
+                    e.int(a);
+                    e.int(b);
+                    e.str(&t);
+                }
+                None => {
+                    e.int(-1);
+                    e.int(-1);
+                    e.str("");
+                }
+            }
+        }
+        e.int(names.len() as i64);
+        for (n, i) in names {
+            e.str(&n);
+            e.int(i);
+        }
+    }
+    let src = leak(d.str()?);
+    let p = re::compile(src, src);
+    match key {
+        "@re.search" | "@re.match" | "@re.fullmatch" => {
+            let s = d.str()?;
+            let m = match key {
+                "@re.search" => p.search(&s),
+                "@re.match" => p.match_(&s),
+                _ => p.fullmatch(&s),
+            };
+            match m {
+                Some(m) => put(e, &m),
+                None => e.int(-1),
+            }
+        }
+        "@re.finditer" => {
+            let ms = p.finditer(&d.str()?);
+            e.int(ms.len() as i64);
+            ms.iter().for_each(|m| put(e, m));
+        }
+        "@re.findall" | "@re.split" => {
+            let s = d.str()?;
+            let v = if key == "@re.split" { p.split(&s) } else { p.findall(&s) };
+            e.int(v.len() as i64);
+            v.iter().for_each(|x| e.str(x));
+        }
+        "@re.findall_groups" => {
+            let rows = p.findall_groups(&d.str()?);
+            e.int(rows.len() as i64);
+            for r in &rows {
+                r.iter().for_each(|x| e.str(x));
+            }
+        }
+        "@re.sub" => {
+            let (repl, s, n) = (d.str()?, d.str()?, d.int()?);
+            e.str(&p.sub(&repl, &s, n));
+        }
+        _ => return Err(PyErr::new(&["NotImplementedError", "RuntimeError", "Exception", "BaseException"], &format!("rupy_lib.wasm has no `{}`", key))),
+    }
+    Ok(())
+}
+
+/// A pattern as a &'static str (pyrt::re keeps its patterns), once per pattern.
+fn leak(s: String) -> &'static str {
+    thread_local! {
+        static PATTERNS: RefCell<std::collections::HashMap<String, &'static str>> = RefCell::new(Default::default());
+    }
+    PATTERNS.with(|p| *p.borrow_mut().entry(s.clone()).or_insert_with(|| Box::leak(s.into_boxed_str())))
+}
+
 thread_local! {
     static HANDLES: RefCell<Handles> = RefCell::new(Handles::default());
     static INPUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };

@@ -107,6 +107,15 @@ impl Match {
     pub fn span(&self, i: i64) -> (i64, i64) {
         (self.start(i), self.end(i))
     }
+
+    /// Every group's (start, end) in characters and its text (None: not in the
+    /// match), and the named groups' numbers: the match as rupy_lib.wasm sends it.
+    pub fn parts(&self) -> (Vec<Option<(i64, i64, String)>>, Vec<(String, i64)>) {
+        let s = &self.subject;
+        let groups = self.groups.iter().map(|g| g.map(|(a, b)| (chars_at(s, a), chars_at(s, b), s[a..b].to_string()))).collect();
+        let names = self.names.capture_names().enumerate().filter_map(|(i, n)| n.map(|n| (n.to_string(), i as i64))).collect();
+        (groups, names)
+    }
 }
 
 impl Py for Match {

@@ -230,9 +230,12 @@ browser page can hand a program its files and get back the ones it wrote. The
 [rupy IDE](ide/README.md) uses this: `open("data.csv")` reads the workspace, and
 rstatistics' `g.save("hist.svg")` writes a file into it.
 
+`random` gives CPython's numbers for a seed (its Mersenne Twister is in the host),
+`itertools` builds its lists in CPython's order, and `re` runs in `rupy_lib.wasm` on the
+same regex crate as the native backend, so a pattern matches exactly as it does there.
+
 Not yet supported by the wasm backend: generators, functions as values (lambdas work as
-`key=` arguments), `nonlocal`, `re`, `heapq`, `itertools`, `random`, exception fields,
-and `ruai.plot`.
+`key=` arguments), `nonlocal`, `heapq`, exception fields, and `ruai.plot`.
 
 ## Rust crates
 

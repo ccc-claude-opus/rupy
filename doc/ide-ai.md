@@ -4,7 +4,7 @@
 
 ## 目標
 
-rupy 只支援 Python 的一個子集，一般寫法常被拒絕；wasm 後端又少了 generator、`random`、`re` 等。AI 助手要解決的就是這件事：
+rupy 只支援 Python 的一個子集，一般寫法常被拒絕；wasm 後端又少了 generator、`heapq` 等。AI 助手要解決的就是這件事：
 
 1. **修正錯誤**：編譯或執行出錯時，按「AI 修正」，AI 解釋原因，並改寫成 rupy 能編譯的程式。
 2. **改寫成 rupy**：把一般 Python（Colab、Jupyter 匯入的程式）改成 rupy 支援的寫法。

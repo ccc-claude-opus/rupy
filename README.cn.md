@@ -121,7 +121,9 @@ def keep(xs: Own[list[int]]) -> None: ...           # Vec<i64>
 
 文本文件可以用：`open()` 读写主机的 `io.files`（任何有 `get(path)` 与 `set(path, text)` 的对象，例如 `Map`；Node.js 下直接读写磁盘），所以网页可以把文件交给程序，再拿回它写出的文件。rupy IDE 就是这样：`open("data.csv")` 读工作区的文件，rstatistics 的 `g.save("hist.svg")` 把图存进工作区。
 
-wasm 后端还不支持：generator、把函数当值传递（lambda 当 `key=` 参数可以）、`nonlocal`、`re`、`heapq`、`itertools`、`random`、异常的自定义字段，以及 `ruai.plot`。`log`、`exp` 等超越函数用 JavaScript 的 `Math`，结果的最后一位可能和 CPython 不同。
+`random` 的随机数和 CPython 相同（Mersenne Twister 在主机里），`itertools` 按 CPython 的顺序生成 list，`re` 在 `rupy_lib.wasm` 里用和原生后端相同的 regex crate 匹配，结果和原生后端一样。
+
+wasm 后端还不支持：generator、把函数当值传递（lambda 当 `key=` 参数可以）、`nonlocal`、`heapq`、异常的自定义字段，以及 `ruai.plot`。`log`、`exp` 等超越函数用 JavaScript 的 `Math`，结果的最后一位可能和 CPython 不同。
 
 ## Rust crate
 

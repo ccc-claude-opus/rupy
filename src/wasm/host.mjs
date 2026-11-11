@@ -709,6 +709,135 @@ function decodeResult(buf) {
   return out;
 }
 
+// ------------------------------------------------------------- random
+
+/** CPython's Mersenne Twister (the random module): the same seed gives the same numbers. */
+class MersenneTwister {
+  constructor() {
+    const words = new Uint32Array(2);
+    crypto.getRandomValues(words);
+    this.seed((BigInt(words[0]) << 32n) | BigInt(words[1]));
+  }
+
+  initGenrand(s) {
+    const mt = (this.mt = new Uint32Array(624));
+    mt[0] = s;
+    for (let i = 1; i < 624; i++) mt[i] = Math.imul(1812433253, mt[i - 1] ^ (mt[i - 1] >>> 30)) + i;
+    this.index = 624;
+  }
+
+  /** random.seed(n) for an int: init_by_array with the 32-bit words of |n|. */
+  seed(n) {
+    let a = n < 0n ? -n : n;
+    const key = [];
+    while (a > 0n) {
+      key.push(Number(a & 0xffffffffn));
+      a >>= 32n;
+    }
+    if (!key.length) key.push(0);
+    this.initGenrand(19650218);
+    const mt = this.mt, N = 624;
+    let i = 1, j = 0;
+    for (let k = Math.max(N, key.length); k > 0; k--) {
+      mt[i] = (mt[i] ^ Math.imul(mt[i - 1] ^ (mt[i - 1] >>> 30), 1664525)) + key[j] + j;
+      i++;
+      j++;
+      if (i >= N) {
+        mt[0] = mt[N - 1];
+        i = 1;
+      }
+      if (j >= key.length) j = 0;
+    }
+    for (let k = N - 1; k > 0; k--) {
+      mt[i] = (mt[i] ^ Math.imul(mt[i - 1] ^ (mt[i - 1] >>> 30), 1566083941)) - i;
+      i++;
+      if (i >= N) {
+        mt[0] = mt[N - 1];
+        i = 1;
+      }
+    }
+    mt[0] = 0x80000000;
+  }
+
+  genrand() {
+    const mt = this.mt;
+    if (this.index >= 624) {
+      for (let i = 0; i < 624; i++) {
+        const y = (mt[i] & 0x80000000) | (mt[(i + 1) % 624] & 0x7fffffff);
+        mt[i] = mt[(i + 397) % 624] ^ (y >>> 1) ^ (y & 1 ? 0x9908b0df : 0);
+      }
+      this.index = 0;
+    }
+    let y = mt[this.index++];
+    y ^= y >>> 11;
+    y ^= (y << 7) & 0x9d2c5680;
+    y ^= (y << 15) & 0xefc60000;
+    return (y ^ (y >>> 18)) >>> 0;
+  }
+
+  random() {
+    const a = this.genrand() >>> 5, b = this.genrand() >>> 6;
+    return (a * 67108864 + b) * (1 / 9007199254740992);
+  }
+
+  /** getrandbits(k), k ≤ 64, as a BigInt */
+  getrandbits(k) {
+    if (k <= 32) return BigInt(this.genrand() >>> (32 - k));
+    const lo = BigInt(this.genrand()), hi = BigInt(this.genrand() >>> (64 - k));
+    return lo | (hi << 32n);
+  }
+
+  /** _randbelow(n) for a BigInt n */
+  randbelow(n) {
+    if (n <= 0n) return 0n;
+    const k = n.toString(2).length;
+    let r = this.getrandbits(k);
+    while (r >= n) r = this.getrandbits(k);
+    return r;
+  }
+
+  randrange(start, stop, step) {
+    if (step === 1n) {
+      if (start >= stop) throw err("ValueError", `empty range in randrange(${start}, ${stop})`);
+      return start + this.randbelow(stop - start);
+    }
+    if (step === 0n) throw err("ValueError", "zero step for randrange()");
+    const n = step > 0n ? (stop - start + step - 1n) / step : (stop - start + step + 1n) / step;
+    if (n <= 0n) throw err("ValueError", "empty range in randrange()");
+    return start + step * this.randbelow(n);
+  }
+
+  /** The indices random.sample(population of n, k) takes (CPython's set-or-pool selection). */
+  sample(n, k) {
+    if (k < 0n || k > BigInt(n)) throw err("ValueError", "Sample larger than population or is negative");
+    k = Number(k);
+    let setsize = 21;
+    if (k > 5) {
+      let p = 1;
+      while (p < k * 3) p *= 4;
+      setsize += p;
+    }
+    const out = [];
+    if (n <= setsize) {
+      const pool = Array.from({ length: n }, (_, i) => i);
+      for (let i = 0; i < k; i++) {
+        const j = Number(this.randbelow(BigInt(n - i)));
+        out.push(pool[j]);
+        pool[j] = pool[n - i - 1];
+      }
+    } else {
+      const selected = new Set();
+      for (let i = 0; i < k; i++) {
+        let j = Number(this.randbelow(BigInt(n)));
+        while (selected.has(j)) j = Number(this.randbelow(BigInt(n)));
+        selected.add(j);
+        out.push(j);
+      }
+    }
+    return out;
+  }
+}
+
 // ------------------------------------------------------------ the module's host
 
 /**
@@ -830,6 +959,99 @@ export async function run(bytes, io = {}) {
       return null;
     },
   });
+  const rng = new MersenneTwister();
+  let sampled = [];
+  Object.assign(ops, {
+    "random.seed": (n) => (rng.seed(n), null),
+    "random.random": () => rng.random(),
+    "random.randbelow": (n) => rng.randbelow(n),
+    "random.randrange": (a, b, step) => rng.randrange(a, b, step),
+    "random.randint": (a, b) => rng.randrange(a, b + 1n, 1n),
+    "random.uniform": (a, b) => a + (b - a) * rng.random(),
+    "random.choice": (n) => {
+      if (n === 0n) throw err("IndexError", "Cannot choose from an empty sequence");
+      return rng.randbelow(n);
+    },
+    "random.sample": (n, k) => {
+      sampled = rng.sample(Number(n), k);
+      return null;
+    },
+    "random.sample_at": (i) => BigInt(sampled[Number(i)]),
+  });
+  // re: a pattern and a match are handles here; rupy_lib.wasm matches (the regex crate)
+  let libCall = () => {
+    throw new Error("rupy wasm host: re needs rupy_lib.wasm");
+  };
+  const patterns = [], pyPatterns = [], matches = [];
+  let items = [];
+  const pattern = (p) => (typeof p === "string" ? p : patterns[Number(p)]);
+  /** The match encoded at out[at] (see rupy_lib's re_call) → [its handle, the next position]. */
+  const readMatch = (out, at) => {
+    const groups = [], names = new Map();
+    for (let n = Number(out[at++]); n > 0; n--) {
+      const [a, b, text] = [out[at++], out[at++], out[at++]];
+      groups.push(a < 0n ? null : { start: a, end: b, text });
+    }
+    for (let n = Number(out[at++]); n > 0; n--) names.set(out[at++], Number(out[at++]));
+    matches.push({ groups, names });
+    return [BigInt(matches.length - 1), at];
+  };
+  const group = (h, i) => {
+    const g = matches[Number(h)].groups;
+    i = Number(i);
+    if (i < 0 || i >= g.length) throw err("IndexError", "no such group");
+    if (!g[i]) throw err("ValueError", `group ${i} did not take part in the match (Python gives None; not in the typed subset)`);
+    return g[i];
+  };
+  Object.assign(ops, {
+    "re.compile": (src, py) => {
+      pyPatterns.push(py); // for its repr
+      return BigInt(patterns.push(src) - 1);
+    },
+    "re.p_repr": (h) => "re.compile(" + pyRepr(pyPatterns[Number(h)]) + ")",
+    "re.m_repr": (h) => {
+      const m = group(h, 0);
+      return `<re.Match object; span=(${m.start}, ${m.end}), match=${pyRepr(m.text)}>`;
+    },
+    "re.finditer": (p, s) => {
+      const out = libCall("@re.finditer", [pattern(p), s]);
+      items = [];
+      let at = 1;
+      for (let n = Number(out[0]); n > 0; n--) {
+        const [h, next] = readMatch(out, at);
+        items.push(h);
+        at = next;
+      }
+      return BigInt(items.length);
+    },
+    "re.iter_at": (i) => items[Number(i)],
+    "re.findall": (p, s) => libCall("@re.findall", [pattern(p), s]).slice(1),
+    "re.split": (p, s) => libCall("@re.split", [pattern(p), s]).slice(1),
+    "re.findall_groups": (p, s) => {
+      const out = libCall("@re.findall_groups", [pattern(p), s]);
+      const n = Number(out[0]), per = n ? (out.length - 1) / n : 0;
+      items = Array.from({ length: n }, (_, i) => out.slice(1 + i * per, 1 + (i + 1) * per));
+      return BigInt(n);
+    },
+    "re.row": (i) => items[Number(i)],
+    "re.sub": (p, repl, s, count) => libCall("@re.sub", [pattern(p), repl, s, count])[0],
+    "re.escape": (s) => [...s].map((c) => ("()[]{}?*+-|^$\\.&~# \t\n\r\x0b\x0c".includes(c) ? "\\" + c : c)).join(""),
+    "re.m_group": (h, i) => group(h, i).text,
+    "re.m_start": (h, i) => group(h, i).start,
+    "re.m_end": (h, i) => group(h, i).end,
+    "re.m_group_named": (h, name) => {
+      const i = matches[Number(h)].names.get(name);
+      if (i === undefined) throw err("IndexError", "no such group");
+      return group(h, i).text;
+    },
+    "re.m_groups": (h) => matches[Number(h)].groups.slice(1).map((_, i) => group(h, i + 1).text),
+  });
+  for (const k of ["search", "match", "fullmatch"]) {
+    ops["re." + k] = (p, s) => {
+      const out = libCall("@re." + k, [pattern(p), s]);
+      return out[0] < 0n ? -1n : readMatch(out, 0)[0];
+    };
+  }
   for (const [k, f] of Object.entries(MATH)) ops[k] = f;
   for (const [k, f] of Object.entries(STR)) ops["str." + k] = f;
   const invoke = () => {
@@ -892,7 +1114,7 @@ export async function run(bytes, io = {}) {
     const lib = (await WebAssembly.instantiate(await libModule(io.lib), {})).exports;
     let results = [];
     let at = 0;
-    ops.pkg = (key, ...toks) => {
+    libCall = (key, toks) => {
       const req = encodeRequest(key, toks);
       const ptr = lib.rl_alloc(req.length); // may grow (and so replace) the memory
       new Uint8Array(lib.memory.buffer, ptr, req.length).set(req);
@@ -900,7 +1122,10 @@ export async function run(bytes, io = {}) {
       const out = decodeResult(new Uint8Array(lib.memory.buffer, lib.rl_out_ptr(), lib.rl_out_len()).slice());
       // the exception's chain (`LinAlgError,ValueError,...`): its nearest kind a program can catch
       if (status !== 0) throw err(out[0].split(",").find((k) => KINDS.includes(k)) ?? "RuntimeError", out[1]);
-      results = out;
+      return out;
+    };
+    ops.pkg = (key, ...toks) => {
+      results = libCall(key, toks);
       at = 0;
       return null;
     };

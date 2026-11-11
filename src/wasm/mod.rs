@@ -21,6 +21,7 @@ mod host;
 mod rt;
 mod show;
 mod stmt;
+mod stdlib;
 
 use crate::ir::*;
 use enc::{Block, Code, Comp, Heap, Module, Storage, SubType, Val};
@@ -214,6 +215,8 @@ pub(crate) struct W<'a> {
     pub tag: u32,
     pub exit_tag: u32,
     nimports: u32,
+    /// the program calls rupy_lib.wasm other than through package functions (`re`)
+    pub uses_lib: bool,
 }
 
 const IMPORTS: &[(&str, &[Val], &[Val])] = &[
@@ -295,6 +298,7 @@ impl<'a> W<'a> {
             tag: 0,
             exit_tag: 1,
             nimports,
+            uses_lib: false,
         }
     }
 
@@ -335,7 +339,7 @@ impl<'a> W<'a> {
             Ty::Gen(_) => return unsupported("generators"),
             Ty::Deque(_) => return unsupported("collections.deque"),
             Ty::File => Val::I64, // the host's handle
-            Ty::Pattern(_) | Ty::Match(_) => return unsupported("the re module"),
+            Ty::Pattern(_) | Ty::Match(_) => Val::I64, // the host's handle
             Ty::Var(_) => return unsupported("an uninferred type"),
         }))
     }
@@ -474,7 +478,7 @@ impl<'a> W<'a> {
         self.define(run, vec![Val::I32]);
         self.m.exports.push(("run".into(), run));
         // the program calls packages: the host loads rupy_lib.wasm for it
-        if self.p.funcs.iter().any(|f| f.ext.is_some()) {
+        if self.uses_lib || self.p.funcs.iter().any(|f| f.ext.is_some()) {
             self.m.exports.push(("rupy_lib".into(), run));
         }
         // last: string constants (all are known now), then module constants
