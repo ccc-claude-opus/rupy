@@ -22,6 +22,7 @@ mod rt;
 mod show;
 mod stmt;
 mod stdlib;
+mod gen;
 
 use crate::ir::*;
 use enc::{Block, Code, Comp, Heap, Module, Storage, SubType, Val};
@@ -181,6 +182,8 @@ pub(crate) struct Fx {
     /// package objects held only by these variables: freed when reassigned
     pub drops: std::collections::HashSet<VarId>,
     pub next_label: u32,
+    /// compiling a generator's resume function
+    pub gen: Option<gen::GenFx>,
 }
 
 impl Fx {
@@ -217,6 +220,8 @@ pub(crate) struct W<'a> {
     nimports: u32,
     /// the program calls rupy_lib.wasm other than through package functions (`re`)
     pub uses_lib: bool,
+    /// the generator types, by element kind (see `gen`)
+    pub gen_types: HashMap<K, u32>,
 }
 
 const IMPORTS: &[(&str, &[Val], &[Val])] = &[
@@ -299,6 +304,7 @@ impl<'a> W<'a> {
             exit_tag: 1,
             nimports,
             uses_lib: false,
+            gen_types: HashMap::new(),
         }
     }
 
@@ -336,7 +342,10 @@ impl<'a> W<'a> {
             },
             Ty::Exc => Val::Ref(Heap::Idx(self.t.exc)),
             Ty::Func(..) => return unsupported("functions as values"),
-            Ty::Gen(_) => return unsupported("generators"),
+            Ty::Gen(t) => {
+                let k = self.kind(t)?;
+                Val::Ref(Heap::Idx(self.gen_base(k)))
+            }
             Ty::Deque(_) => return unsupported("collections.deque"),
             Ty::File => Val::I64, // the host's handle
             Ty::Pattern(_) | Ty::Match(_) => Val::I64, // the host's handle
@@ -498,7 +507,7 @@ impl<'a> W<'a> {
     fn func(&mut self, fid: FuncId) -> Res<()> {
         let f = &self.p.funcs[fid];
         if f.is_gen {
-            return unsupported("generator functions");
+            return self.gen_func(fid);
         }
         if f.cache {
             return unsupported("@functools.cache");

@@ -14,6 +14,8 @@ pub(crate) enum Cursor {
     Dict { d: u32, i: u32, mode: u8, k: Ty, v: Ty },
     Enumerate { inner: Box<Cursor>, n: u32, ty: Ty },
     Zip { inner: Vec<Cursor>, ty: Ty },
+    /// a generator (see `gen`): its frame, as `gen_base`
+    Gen { g: u32, base: u32, ty: Ty },
 }
 
 impl<'a> W<'a> {
@@ -38,6 +40,78 @@ impl<'a> W<'a> {
     }
 
     fn stmt(&mut self, s: &Stmt) -> Res<()> {
+        if self.fx.gen.is_some() {
+            return self.gen_stmt(s);
+        }
+        self.stmt_kind(s)
+    }
+
+    /// A `while` loop; `cond` pushes its condition.
+    pub(crate) fn while_loop(&mut self, body: &[Stmt], orelse: &[Stmt], cond: impl FnOnce(&mut W<'a>) -> Res<()>) -> Res<()> {
+        let id = self.new_label();
+        self.c().block(Block::Empty);
+        self.labeled(Lab::Break(id), |w| {
+            w.c().block(Block::Empty);
+            w.labeled(Lab::Plain, |w| {
+                w.c().loop_(Block::Empty);
+                w.labeled(Lab::Continue(id), |w| {
+                    cond(w)?;
+                    w.c().i32_eqz().br_if(1);
+                    w.loop_body(id, body)?;
+                    w.c().br(0);
+                    Ok(())
+                })?;
+                w.c().end();
+                Ok(())
+            })?;
+            w.c().end();
+            w.block(orelse)
+        })?;
+        self.c().end();
+        Ok(())
+    }
+
+    /// A `for` loop over the cursor `cur`. `resume` (a generator's local): when
+    /// it is set, the first round goes into the body without taking an item.
+    pub(crate) fn for_loop(&mut self, t: &Target, it: &Iter, cur: &Cursor, body: &[Stmt], orelse: &[Stmt], resume: Option<u32>) -> Res<()> {
+        let elem = self.iter_ty(it)?;
+        let id = self.new_label();
+        self.c().block(Block::Empty);
+        self.labeled(Lab::Break(id), |w| {
+            w.c().block(Block::Empty);
+            w.labeled(Lab::Plain, |w| {
+                w.c().loop_(Block::Empty);
+                w.labeled(Lab::Continue(id), |w| {
+                    // exhausted: leave to the `else` code (depth 1)
+                    match resume {
+                        Some(r) => {
+                            w.c().local_get(r).i32_eqz().if_(Block::Empty);
+                            w.labeled(Lab::Plain, |w| {
+                                w.iter_next(cur, 2)?;
+                                w.assign(t, &elem)
+                            })?;
+                            w.c().end();
+                        }
+                        None => {
+                            w.iter_next(cur, 1)?;
+                            w.assign(t, &elem)?;
+                        }
+                    }
+                    w.loop_body(id, body)?;
+                    w.c().br(0);
+                    Ok(())
+                })?;
+                w.c().end();
+                Ok(())
+            })?;
+            w.c().end();
+            w.block(orelse)
+        })?;
+        self.c().end();
+        Ok(())
+    }
+
+    pub(crate) fn stmt_kind(&mut self, s: &Stmt) -> Res<()> {
         match &s.kind {
             StmtKind::Expr(e) => {
                 self.expr(e)?;
@@ -79,52 +153,10 @@ impl<'a> W<'a> {
                 })?;
                 self.c().end();
             }
-            StmtKind::While(c, body, orelse) => {
-                let id = self.new_label();
-                self.c().block(Block::Empty);
-                self.labeled(Lab::Break(id), |w| {
-                    w.c().block(Block::Empty);
-                    w.labeled(Lab::Plain, |w| {
-                        w.c().loop_(Block::Empty);
-                        w.labeled(Lab::Continue(id), |w| {
-                            w.cond(c)?;
-                            w.c().i32_eqz().br_if(1);
-                            w.loop_body(id, body)?;
-                            w.c().br(0);
-                            Ok(())
-                        })?;
-                        w.c().end();
-                        Ok(())
-                    })?;
-                    w.c().end();
-                    w.block(orelse)
-                })?;
-                self.c().end();
-            }
+            StmtKind::While(c, body, orelse) => self.while_loop(body, orelse, |w| w.cond(c))?,
             StmtKind::For(t, it, body, orelse) => {
                 let cur = self.iter_init(it)?;
-                let elem = self.iter_ty(it)?;
-                let id = self.new_label();
-                self.c().block(Block::Empty);
-                self.labeled(Lab::Break(id), |w| {
-                    w.c().block(Block::Empty);
-                    w.labeled(Lab::Plain, |w| {
-                        w.c().loop_(Block::Empty);
-                        w.labeled(Lab::Continue(id), |w| {
-                            // exhausted: leave to the `else` code (depth 1)
-                            w.iter_next(&cur, 1)?;
-                            w.assign(t, &elem)?;
-                            w.loop_body(id, body)?;
-                            w.c().br(0);
-                            Ok(())
-                        })?;
-                        w.c().end();
-                        Ok(())
-                    })?;
-                    w.c().end();
-                    w.block(orelse)
-                })?;
-                self.c().end();
+                self.for_loop(t, it, &cur, body, orelse, None)?;
             }
             StmtKind::Break | StmtKind::Continue => {
                 let (id, nfin) = *self.fx.loops.last().expect("loop");
@@ -133,6 +165,7 @@ impl<'a> W<'a> {
                 let d = self.fx.depth(l);
                 self.c().br(d);
             }
+            StmtKind::Return(_) if self.fx.gen.is_some() => self.gen_return()?,
             StmtKind::Return(e) => {
                 let mut tmp = None;
                 if let Some(e) = e {
@@ -218,7 +251,7 @@ impl<'a> W<'a> {
     }
 
     /// Run the `finally` code of the `try`s above `keep` (outside each of them).
-    fn run_finals(&mut self, keep: usize) -> Res<()> {
+    pub(crate) fn run_finals(&mut self, keep: usize) -> Res<()> {
         let all = self.fx.finals.clone();
         for i in (keep..all.len()).rev() {
             let saved = self.fx.finals.split_off(i);

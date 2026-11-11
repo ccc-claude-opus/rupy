@@ -84,3 +84,21 @@ print(re.sub(r"\\d", "#", "a1b22"))
   assert.equal(r.error, undefined);
   assert.equal(r.out, "42 a\n[('a', 'b'), ('a', 'c'), ('b', 'c')]\nann (10, 17)\na#b##\n");
 });
+
+test("a generator runs one item at a time", async () => {
+  const main = `from typing import Iterator
+
+
+def count(n: int) -> Iterator[int]:
+    for i in range(n):
+        print("make", i)
+        yield i
+
+
+for x in count(2):
+    print("got", x)
+`;
+  const r = await output({ main: "main.py", files: { "main.py": main } });
+  assert.equal(r.error, undefined);
+  assert.equal(r.out, "make 0\ngot 0\nmake 1\ngot 1\n");
+});

@@ -53,7 +53,7 @@ impl<'a> W<'a> {
         self.host_call("random.randbelow", &Ty::Int)
     }
 
-    pub fn random_fn(&mut self, name: &str, a: &[Expr], e: &Expr) -> Res<()> {
+    pub fn random_fn(&mut self, name: &str, a: &[Expr], _e: &Expr) -> Res<()> {
         match name {
             "random.seed" => {
                 self.host_args(a, &[Ty::Int])?;
@@ -130,7 +130,7 @@ impl<'a> W<'a> {
         Ok(())
     }
 
-    fn kval_of(&self, k: super::K) -> Val {
+    pub(crate) fn kval_of(&self, k: super::K) -> Val {
         match k {
             super::K::I64 => Val::I64,
             super::K::F64 => Val::F64,

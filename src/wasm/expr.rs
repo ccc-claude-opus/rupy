@@ -892,7 +892,7 @@ impl<'a> W<'a> {
         Ok(match it {
             Iter::Range(..) => Ty::Int,
             Iter::Over(e) => match &e.ty {
-                Ty::List(t) | Ty::Set(t) => t.as_ref().clone(),
+                Ty::List(t) | Ty::Set(t) | Ty::Gen(t) => t.as_ref().clone(),
                 Ty::Dict(k, _, _) => k.as_ref().clone(),
                 Ty::Str => Ty::Str,
                 Ty::Tuple(ts) => ts.first().cloned().unwrap_or(Ty::Int),
@@ -1002,6 +1002,11 @@ impl<'a> W<'a> {
                 Cursor::List { xs, i, k, ty: t, rev: false }
             }
             Iter::Over(e) | Iter::Gen(e) => match &e.ty {
+                Ty::Gen(t) if !matches!(e.kind, ExprKind::Comp(_)) => {
+                    let t = t.as_ref().clone();
+                    self.expr(e)?;
+                    self.gen_cursor(&t)?
+                }
                 Ty::List(t) | Ty::Gen(t) => {
                     let t = t.as_ref().clone();
                     let k = self.kind(&t)?;
@@ -1190,6 +1195,10 @@ impl<'a> W<'a> {
                     self.c().local_get(l);
                 }
                 self.c().struct_new(tt);
+            }
+            Cursor::Gen { g, base, ty } => {
+                let ty = ty.clone();
+                self.gen_next_or(*g, *base, &ty, exit)?;
             }
         }
         Ok(())

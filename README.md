@@ -235,8 +235,13 @@ rstatistics' `g.save("hist.svg")` writes a file into it.
 `itertools` builds its lists in CPython's order, and `re` runs in `rupy_lib.wasm` on the
 same regex crate as the native backend, so a pattern matches exactly as it does there.
 
-Not yet supported by the wasm backend: generators, functions as values (lambdas work as
-`key=` arguments), `nonlocal`, `heapq`, exception fields, and `ruai.plot`.
+Generators work as in CPython, one item at a time: a generator is a frame object, and
+`next` reruns its code from the start, skipping to the `yield` it stopped at, with its
+locals loaded from the frame (as Emscripten's Asyncify does). A `yield` may not stand in
+`except`, `finally` or the `else` of a loop.
+
+Not yet supported by the wasm backend: functions as values (lambdas work as `key=`
+arguments), `nonlocal`, `heapq`, exception fields, and `ruai.plot`.
 
 ## Rust crates
 

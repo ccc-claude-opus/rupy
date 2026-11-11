@@ -123,7 +123,9 @@ def keep(xs: Own[list[int]]) -> None: ...           # Vec<i64>
 
 `random` 的亂數和 CPython 相同（Mersenne Twister 在主機裡），`itertools` 照 CPython 的順序產生 list，`re` 在 `rupy_lib.wasm` 裡用和原生後端相同的 regex crate 比對，結果和原生後端一樣。
 
-wasm 後端還不支援：generator、把函式當值傳遞（lambda 當 `key=` 參數可以）、`nonlocal`、`heapq`、例外的自訂欄位，以及 `ruai.plot`。`log`、`exp` 等超越函數用 JavaScript 的 `Math`，結果的最後一位可能和 CPython 不同。
+generator 和 CPython 一樣一次產生一項：generator 是一個 frame 物件，`next` 從頭重跑它的程式，區域變數從 frame 讀回，直接跳到上次停下的 `yield`（和 Emscripten 的 Asyncify 相同的作法）。`yield` 不能放在 `except`、`finally` 或迴圈的 `else` 裡。
+
+wasm 後端還不支援：把函式當值傳遞（lambda 當 `key=` 參數可以）、`nonlocal`、`heapq`、例外的自訂欄位，以及 `ruai.plot`。`log`、`exp` 等超越函數用 JavaScript 的 `Math`，結果的最後一位可能和 CPython 不同。
 
 ## Rust crate
 
