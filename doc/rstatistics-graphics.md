@@ -1,6 +1,13 @@
 # rstatistics 繪圖規劃
 
-狀態：規劃中，尚未實作（2026-11-06）。
+狀態（2026-11-14）：階段 1–4 已完成，rstatistics 0.4.0（`rstatistics/rstatistics/graphics.py`）。
+
+- 已完成：計算層；SVG 引擎；`plot`、`hist`、`boxplot`、`barplot`、`qqnorm`、`qqline`、`curve(name, ...)`、`legend`；`mfrow`；`save` / `show`。與 R 的對照測試 `graphics`、`plots` 都通過。
+- 第六節的三個決定都採用建議：自己做 SVG 引擎、`g = r.graphics()`、`curve` 用分佈名稱。
+- 未做：階段 5 的 `qqplot`、`pairs`、`stripchart`、`matplot`。
+- 可以改進：rupy 的 wasm 與 Rust 後端現在都支援函數當值，`curve` 可以加上 R 原本的寫法 `g.curve(r.dnorm, -3, 3)`。
+
+以下是原始規劃（2026-11-06）。
 
 目標：讓 rstatistics 支援 R 中適合機率統計的繪圖函數。數值要和 R 一致，外觀要像 R；用 rupy 寫成，所以在 CPython、rupy（Rust / wasm / 瀏覽器）上的輸出完全相同，而且不依賴任何套件。
 

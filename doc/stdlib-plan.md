@@ -1,6 +1,6 @@
 # 標準函數庫與外部套件的方針
 
-狀態：方針已定（2026-11-06），尚未實作。
+狀態（2026-11-14）：方針已定。wasm 已支援函數當值與產生器；下面「待補」表中的模組與函數都還沒做（只有 `dataclasses` 已可使用）。
 
 ## 決定
 
@@ -23,7 +23,7 @@
 | 1 | `json.loads` | 目前只有 `json.dumps` |
 | 2 | `csv`、`io.StringIO`、`pathlib`、`datetime`、`fractions`、`decimal`、`statistics` | 資料處理 |
 | 3 | `string`、`textwrap`、`copy`、`operator`、`argparse` | 常用工具 |
-| 3 | `dataclasses`、`enum` | 先確認語言層是否已支援 |
+| 3 | `enum`（`dataclasses` 已可使用） | |
 | 4 | `base64`、`hashlib`、`struct`、`urllib.parse`、`uuid` | 編碼與雜湊 |
 | 4 | `glob`、`shutil`、`tempfile` | 檔案系統；wasm 上以 host 提供或不支援 |
 | 5 | `logging`、`sqlite3`、`threading`、`asyncio`、`pickle` | 和靜態型別或 wasm 衝突較大，最後再評估 |
@@ -35,11 +35,11 @@
 
 ## 語言層面的相關工作
 
-wasm 後端還不支援產生器，也不支援把函數當值傳遞。補上之後，`map(f, xs)`、`curve(dnorm)` 這類用法才能在所有後端執行。這項工作影響面很廣，可以和第 1、2 優先的模組一起排程。
+已完成（2026-11）：wasm 後端支援產生器（包含 `try` 裡的 `yield`）、函數當值、`nonlocal`、`functools.cache`；Rust 後端也支援函數當值。
 
-## 下週（2026-11-10 額度重置後）的工作
+## 2026-11-10 那週的工作
 
-依序進行：
+第 1 項已完成（由其他 AI 完成，產生器也一併做了）；第 2、3 項還沒做，是接下來的工作。原訂順序：
 
 1. **wasm 支援函數當值**：閉包轉換、`call_ref`，以及頂層函數、lambda、方法、內建函數各自的轉接函數。預估我的作業時間約 1–3 小時，約佔每週額度的 10–20%。
 2. **第 1 優先的標準函數**：`math.gamma`、`lgamma`、`erf`、`erfc`、`fsum`、`atanh`、`asinh`、`acosh`，以及 `json.loads`。完成後，rstatistics 可以改用這些內建函數。

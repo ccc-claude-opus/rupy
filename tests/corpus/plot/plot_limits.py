@@ -17,7 +17,8 @@ lines = ax.plot(x, np.sin(x), "r-", label="sin")
 ax.plot(x, np.cos(x), "--")
 print(fig, lines[0], lines[0].get_color(), lines[0].get_linestyle(), lines[0].get_marker(), lines[0].get_linewidth())
 line2 = ax.get_lines()[1]
-print(line2, line2.get_color(), line2.get_linestyle())
+# the cycle color: matplotlib 3.11 gives an RGB tuple, 3.10 "#1f77b4"
+print(line2, line2.get_linestyle())
 show_axes(ax)
 ax.set_title("waves")
 ax.set_xlabel("t")
