@@ -278,6 +278,80 @@ impl<'a> W<'a> {
         self.host_call(name, &e.ty)
     }
 
+    /// `json.loads`: the JSON value at the host's cursor → a value of type `t` (the
+    /// host raises TypeError when the JSON is of another type).
+    pub fn rt_json_load(&mut self, t: &Ty) -> Res<u32> {
+        let rv = self.val(t)?.unwrap_or(Val::I32);
+        let t = t.clone();
+        self.rt_fn(&format!("json_load:{:?}", t), move |w| {
+            w.fx.params = vec![];
+            // the length of the list (0) or dict (1) at the cursor → an i64 local
+            let len = |w: &mut W, dict: i64| -> Res<u32> {
+                let n = w.fx.local(Val::I64);
+                w.c().i64_const(dict);
+                w.host_arg(&Ty::Int)?;
+                w.host_call("json.len", &Ty::Int)?;
+                w.c().local_set(n);
+                Ok(n)
+            };
+            let enter = |w: &mut W, i: u32| -> Res<()> {
+                w.c().local_get(i);
+                w.host_arg(&Ty::Int)?;
+                w.host_call("json.enter", &Ty::None)
+            };
+            match &t {
+                Ty::Int => w.host_call("json.int", &Ty::Int)?,
+                Ty::Float => w.host_call("json.float", &Ty::Float)?,
+                Ty::Bool => w.host_call("json.bool", &Ty::Bool)?,
+                Ty::Str => w.host_call("json.text", &Ty::Str)?,
+                Ty::Optional(it) => {
+                    let f = w.rt_json_load(it)?;
+                    w.host_call("json.null", &Ty::Bool)?;
+                    w.c().if_(Block::Val(rv));
+                    w.zero(rv);
+                    w.c().else_().call(f);
+                    w.box_opt(it)?;
+                    w.c().end();
+                }
+                Ty::List(et) => {
+                    let k = w.kind(et)?;
+                    let (new, app, f) = (w.rt_list_new(k)?, w.rt_list_append(k)?, w.rt_json_load(et)?);
+                    let n = len(w, 0)?;
+                    let (l, i) = (w.fx.local(rv), w.fx.local(Val::I64));
+                    w.c().local_get(n).i32_wrap_i64().call(new).local_set(l).i64_const(0).local_set(i);
+                    w.c().block(Block::Empty).loop_(Block::Empty);
+                    w.c().local_get(i).local_get(n).i64_ge_s().br_if(1);
+                    enter(w, i)?;
+                    w.c().local_get(l).call(f).call(app);
+                    w.host_call("json.exit", &Ty::None)?;
+                    w.c().local_get(i).i64_const(1).i64_add().local_set(i).br(0);
+                    w.c().end().end().local_get(l);
+                }
+                Ty::Dict(_, vt, _) => {
+                    let (set, f) = (w.rt_dict_set(&Ty::Str, vt)?, w.rt_json_load(vt)?);
+                    let n = len(w, 1)?;
+                    let (d, i) = (w.fx.local(rv), w.fx.local(Val::I64));
+                    w.dict_new(&Ty::Str)?;
+                    w.c().local_set(d).i64_const(0).local_set(i);
+                    w.c().block(Block::Empty).loop_(Block::Empty);
+                    w.c().local_get(i).local_get(n).i64_ge_s().br_if(1);
+                    w.c().local_get(d).local_get(i);
+                    w.host_arg(&Ty::Int)?;
+                    w.host_call("json.key", &Ty::Str)?;
+                    enter(w, i)?;
+                    w.c().call(f);
+                    w.box_eq(vt)?;
+                    w.c().call(set);
+                    w.host_call("json.exit", &Ty::None)?;
+                    w.c().local_get(i).i64_const(1).i64_add().local_set(i).br(0);
+                    w.c().end().end().local_get(d);
+                }
+                t => return super::unsupported(format!("json.loads() into {:?}", t)),
+            }
+            Ok(vec![rv])
+        })
+    }
+
     /// `json.dumps(x)` of a value of type `t`: CPython's defaults (", ", ": ", ensure_ascii).
     pub fn rt_json(&mut self, t: &Ty) -> Res<u32> {
         let pv = self.val(t)?.unwrap_or(Val::I32);

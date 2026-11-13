@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `math.gamma`, `lgamma`, `erf`, `erfc`, `asinh`, `acosh`, `atanh` and `math.fsum`, with
+  CPython's errors. gamma and lgamma are CPython's own Lanczos code; Apple's clang fuses
+  its `a * b + c` into fused multiply-adds, so rupy does too (`mul_add`; a BigInt
+  `fmaExact` on wasm), and the Rust backend matches CPython to the last bit. On wasm the
+  last digit may differ (JavaScript's exp / pow, FreeBSD's erf): `std_math_special.py` is
+  Rust only, `std_math_special12.py` checks 12 digits on both.
+- `json.loads` into the declared type: `xs: list[int] = json.loads(s)`, for int, float,
+  str, bool, Optional, list and `dict[str, ...]`; CPython's parse errors (ValueError), and
+  TypeError for JSON of another type. Both backends.
 - Functions as values on the Rust backend: a `Callable` is a `pyrt::Fun<dyn Fn>` (an `Rc` closure),
   so closures can be returned (`make_adder`), kept in lists, dicts and dataclass fields, and
   called directly (`b.on_click(x)`, `pick("add")(2.0, 3.5)`). A lambda that is kept and reads a

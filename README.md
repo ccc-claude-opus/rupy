@@ -66,7 +66,7 @@ and `try` / `finally`; comprehensions, f-strings, `match`, `with open`, generato
 nested functions with `nonlocal`, lambdas and `Callable`; generic functions, `Protocol`
 and union parameters (compiled per argument type); `math`, `collections`, `heapq`,
 `bisect`, `itertools`, `functools`, `random` (same numbers as CPython for the same
-seed), `re`, `sys`, `time`, `json.dumps`, `os.path`.
+seed), `re`, `sys`, `time`, `json.dumps` / `json.loads`, `os.path`.
 
 How some constructs come out (more in [docs/cases](docs/cases/README.md)):
 
@@ -128,7 +128,7 @@ name are overloads, `@rust("...")` gives a Rust path or an expression template, 
   (`tests/corpus/py/std_*.py`): `shlex`, `fnmatch`, `html`, `subprocess`, more of `os` /
   `os.path` / `sys` / `time`, besides the modules built into the translator (`math`,
   `collections`, `heapq`, `bisect`, `itertools`, `functools`, `random`, `re`, `sys`, `time`,
-  `json.dumps`, `os.path`).
+  `json.dumps` / `json.loads`, `os.path`).
 - **numpy**: float64 / float32 / int64 / bool arrays with NumPy 2's promotion,
   broadcasting, views, masks and index arrays, reductions in NumPy's summation order,
   `linalg`, `random.default_rng`; printing identical to NumPy's.
@@ -240,7 +240,7 @@ Generators work as in CPython, one item at a time: a generator is a frame object
 locals loaded from the frame (as Emscripten's Asyncify does); a `yield` in `finally` code
 resumes on the path without an exception. A `Callable` is a closure (a function
 reference and the variables it captures); a nested function's `nonlocal` variables are
-copied in and back out at each call. `collections`, `heapq`, `bisect`, `json.dumps`,
+copied in and back out at each call. `collections`, `heapq`, `bisect`, `json.dumps` / `json.loads`,
 `os.path`, `time` and `@functools.cache` work as on the native backend; `open()`,
 `os.path.exists` and `os.remove` use the host's files.
 

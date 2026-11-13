@@ -64,7 +64,7 @@ rupy fuzz 300                 # 隨機程式與 CPython 比對
 `with open`、generator、使用 `nonlocal` 的巢狀函式、lambda 與 `Callable`；泛型函式、
 `Protocol` 與聯集型別參數（依引數型別分別編譯）；`math`、`collections`、`heapq`、
 `bisect`、`itertools`、`functools`、`random`（同一個 seed 產生和 CPython 一樣的數字）、
-`re`、`sys`、`time`、`json.dumps`、`os.path`。
+`re`、`sys`、`time`、`json.dumps` / `json.loads`、`os.path`。
 
 一些寫法翻譯後的樣子（更多在 [docs/cases](docs/cases/README.md)）：
 
@@ -123,7 +123,7 @@ def keep(xs: Own[list[int]]) -> None: ...           # Vec<i64>
 
 `random` 的亂數和 CPython 相同（Mersenne Twister 在主機裡），`itertools` 照 CPython 的順序產生 list，`re` 在 `rupy_lib.wasm` 裡用和原生後端相同的 regex crate 比對，結果和原生後端一樣。
 
-generator 和 CPython 一樣一次產生一項：generator 是一個 frame 物件，`next` 從頭重跑它的程式，區域變數從 frame 讀回，直接跳到上次停下的 `yield`（和 Emscripten 的 Asyncify 相同的作法）；`finally` 裡的 `yield` 在沒有例外的路徑上恢復。`Callable` 是 closure（函式參考加上它擷取的變數）；巢狀函式的 `nonlocal` 變數在每次呼叫時複製進去、再複製回來。`collections`、`heapq`、`bisect`、`json.dumps`、`os.path`、`time` 與 `@functools.cache` 和原生後端相同；`open()`、`os.path.exists`、`os.remove` 用主機的檔案。
+generator 和 CPython 一樣一次產生一項：generator 是一個 frame 物件，`next` 從頭重跑它的程式，區域變數從 frame 讀回，直接跳到上次停下的 `yield`（和 Emscripten 的 Asyncify 相同的作法）；`finally` 裡的 `yield` 在沒有例外的路徑上恢復。`Callable` 是 closure（函式參考加上它擷取的變數）；巢狀函式的 `nonlocal` 變數在每次呼叫時複製進去、再複製回來。`collections`、`heapq`、`bisect`、`json.dumps` / `json.loads`、`os.path`、`time` 與 `@functools.cache` 和原生後端相同；`open()`、`os.path.exists`、`os.remove` 用主機的檔案。
 
 wasm 後端不支援：Rust crate 與 Python 模組（Python bridge）、`ruai.plot`，以及需要作業系統的套件函式（`subprocess`、`os.listdir` 等）。`log`、`exp` 等超越函數用 JavaScript 的 `Math`，結果的最後一位可能和 CPython 不同。
 

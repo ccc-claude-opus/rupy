@@ -391,7 +391,465 @@ const MATH = {
   cbrt: (x) => Math.cbrt(x),
   degrees: (x) => x * (180 / Math.PI),
   radians: (x) => x * (Math.PI / 180),
+  gamma: (x) => gamma(x),
+  lgamma: (x) => lgamma(x),
+  erf: (x) => erf(x),
+  erfc: (x) => erfc(x),
+  asinh: (x) => Math.asinh(x),
+  acosh: (x) => {
+    if (x < 1) throw floatArg("expected argument value not less than 1", x);
+    return Math.acosh(x);
+  },
+  atanh: (x) => {
+    if (Math.abs(x) >= 1) throw floatArg("expected a number between -1 and 1", x);
+    return Math.atanh(x);
+  },
+  fsum_begin: () => {
+    fsum = { p: [], special: 0, inf: 0 };
+    return null;
+  },
+  fsum_add: (x) => fsumAdd(fsum, x),
+  fsum_end: () => fsumEnd(fsum),
 };
+
+const floatArg = (msg, x) => err("ValueError", msg + ", got " + floatRepr(x));
+
+// x * y + z rounded once: exact with BigInts, then rounded to nearest even
+const fview = new DataView(new ArrayBuffer(8));
+function parts(x) {
+  fview.setFloat64(0, x);
+  const bits = fview.getBigUint64(0);
+  const ex = Number((bits >> 52n) & 0x7ffn);
+  let m = bits & 0xfffffffffffffn;
+  if (ex !== 0) m |= 1n << 52n;
+  return [bits >> 63n ? -m : m, ex === 0 ? -1074 : ex - 1075];
+}
+function fmaExact(x, y, z) {
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x === 0 || y === 0) return x * y + z;
+  if (!Number.isFinite(z)) return z;
+  if (z === 0) return x * y; // the exact product is not zero: one rounding, sign kept
+  const [mx, ex] = parts(x), [my, ey] = parts(y), [mz, ez] = parts(z);
+  const ep = ex + ey, e = Math.min(ep, ez);
+  const sum = ((mx * my) << BigInt(ep - e)) + (mz << BigInt(ez - e));
+  if (sum === 0n) return 0;
+  const neg = sum < 0n;
+  let q = neg ? -sum : sum;
+  const shift = Math.max(q.toString(2).length - 53, -1074 - e);
+  let qe = e;
+  if (shift > 0) {
+    const b = BigInt(shift);
+    const rem = q & ((1n << b) - 1n), half = 1n << (b - 1n);
+    q >>= b;
+    if (rem > half || (rem === half && (q & 1n) === 1n)) q += 1n;
+    qe += shift;
+  }
+  const r = Number(q) * 2 ** qe;
+  return neg ? -r : r;
+}
+
+// gamma and lgamma: CPython's Lanczos approximation (Modules/mathmodule.c). The C
+// compiler fuses its `a * b + c` into fused multiply-adds (clang on arm64 does).
+const LANCZOS_G = 6.024680040776729583740234375;
+const LANCZOS_G_MINUS_HALF = 5.524680040776729583740234375;
+const LANCZOS_NUM = [
+  23531376880.410759688572007674451636754734846804940, 42919803642.649098768957899047001988850926355848959,
+  35711959237.355668049440185451547166705960488635843, 17921034426.037209699919755754458931112671403265390,
+  6039542586.3520280050642916443072979210699388420708, 1439720407.3117216736632230727949123939715485786772,
+  248874557.86205415651146038641322942321632125127801, 31426415.585400194380614231628318205362874684987640,
+  2876370.6289353724412254090516208496135991145378768, 186056.26539522349504029498971604569928220784236328,
+  8071.6720023658162106380029022722506138218516325024, 210.82427775157934587250973392071336271166969580291,
+  2.5066282746310002701649081771338373386264310793408,
+];
+const LANCZOS_DEN = [0, 39916800, 120543840, 150917976, 105258076, 45995730, 13339535, 2637558, 357423, 32670, 1925, 66, 1];
+const GAMMA_INTEGRAL = [
+  1, 1, 2, 6, 24, 120, 720, 5040, 40320, 362880, 3628800, 39916800, 479001600, 6227020800, 87178291200,
+  1307674368000, 20922789888000, 355687428096000, 6402373705728000, 121645100408832000, 2432902008176640000,
+  51090942171709440000, 1124000727777607680000,
+];
+const LOGPI = 1.144729885849400174143427351353058711647;
+const NONINT = "expected a noninteger or positive integer";
+
+function lanczosSum(x) {
+  let num = 0, den = 0;
+  if (x < 5) {
+    for (let i = 12; i >= 0; i--) {
+      num = fmaExact(num, x, LANCZOS_NUM[i]);
+      den = fmaExact(den, x, LANCZOS_DEN[i]);
+    }
+  } else {
+    for (let i = 0; i < 13; i++) {
+      num = num / x + LANCZOS_NUM[i];
+      den = den / x + LANCZOS_DEN[i];
+    }
+  }
+  return num / den;
+}
+
+// C's round: halves away from zero
+const roundC = (x) => Math.sign(x) * Math.floor(Math.abs(x) + 0.5);
+
+function sinpi(x) {
+  const y = Math.abs(x) % 2;
+  let r;
+  switch (roundC(2 * y)) {
+    case 0: r = Math.sin(Math.PI * y); break;
+    case 1: r = Math.cos(Math.PI * (y - 0.5)); break;
+    case 2: r = Math.sin(Math.PI * (1 - y)); break;
+    case 3: r = -Math.cos(Math.PI * (y - 1.5)); break;
+    default: r = Math.sin(Math.PI * (y - 2));
+  }
+  return (x < 0 || Object.is(x, -0) ? -1 : 1) * r;
+}
+
+function gamma(x) {
+  if (!Number.isFinite(x)) {
+    if (Number.isNaN(x) || x > 0) return x;
+    throw floatArg(NONINT, x);
+  }
+  if (x === Math.floor(x)) {
+    if (x <= 0) throw floatArg(NONINT, x);
+    if (x <= 23) return GAMMA_INTEGRAL[x - 1];
+  }
+  const absx = Math.abs(x);
+  if (absx < 1e-20) return checked(1 / x, x);
+  if (absx > 200) {
+    if (x < 0) return 0 / sinpi(x);
+    throw range();
+  }
+  const y = absx + LANCZOS_G_MINUS_HALF;
+  let z = absx > LANCZOS_G_MINUS_HALF ? (y - absx) - LANCZOS_G_MINUS_HALF : (y - LANCZOS_G_MINUS_HALF) - absx;
+  z = z * LANCZOS_G / y;
+  let r;
+  if (x < 0) {
+    r = -Math.PI / sinpi(absx) / absx * Math.exp(y) / lanczosSum(absx);
+    r = fmaExact(-z, r, r);
+    if (absx < 140) {
+      r /= Math.pow(y, absx - 0.5);
+    } else {
+      const s = Math.pow(y, absx / 2 - 0.25);
+      r /= s;
+      r /= s;
+    }
+  } else {
+    r = lanczosSum(absx) / Math.exp(y);
+    r = fmaExact(z, r, r);
+    if (absx < 140) {
+      r *= Math.pow(y, absx - 0.5);
+    } else {
+      const s = Math.pow(y, absx / 2 - 0.25);
+      r *= s;
+      r *= s;
+    }
+  }
+  return checked(r, x);
+}
+
+function lgamma(x) {
+  if (!Number.isFinite(x)) return Number.isNaN(x) ? x : Infinity;
+  if (x === Math.floor(x) && x <= 2) {
+    if (x <= 0) throw floatArg(NONINT, x);
+    return 0;
+  }
+  const absx = Math.abs(x);
+  if (absx < 1e-20) return -Math.log(absx);
+  let r = Math.log(lanczosSum(absx)) - LANCZOS_G;
+  r = fmaExact(absx - 0.5, Math.log(absx + LANCZOS_G - 0.5) - 1, r);
+  if (x < 0) r = LOGPI - Math.log(Math.abs(sinpi(absx))) - Math.log(absx) - r;
+  return checked(r, x);
+}
+
+// erf and erfc: FreeBSD's s_erf.c, as in most C libraries
+const ERX = 8.45062911510467529297e-01, EFX8 = 1.02703333676410069053e+00;
+const PP = [1.28379167095512558561e-01, -3.25042107247001499370e-01, -2.84817495755985104766e-02, -5.77027029648944159157e-03, -2.37630166566501626084e-05];
+const QQ = [1, 3.97917223959155352819e-01, 6.50222499887672944485e-02, 5.08130628187576562776e-03, 1.32494738004321644526e-04, -3.96022827877536812320e-06];
+const PA = [-2.36211856075265944077e-03, 4.14856118683748331666e-01, -3.72207876035701323847e-01, 3.18346619901161753674e-01, -1.10894694282396677476e-01, 3.54783043256182359371e-02, -2.16637559486879084300e-03];
+const QA = [1, 1.06420880400844228286e-01, 5.40397917702171048937e-01, 7.18286544141962662868e-02, 1.26171219808761642112e-01, 1.36370839120290507362e-02, 1.19844998467991074170e-02];
+const RA = [-9.86494403484714822705e-03, -6.93858572707181764372e-01, -1.05586262253232909814e+01, -6.23753324503260060396e+01, -1.62396669462573470355e+02, -1.84605092906711035994e+02, -8.12874355063065934246e+01, -9.81432934416914548592e+00];
+const SA = [1, 1.96512716674392571292e+01, 1.37657754143519042600e+02, 4.34565877475229228821e+02, 6.45387271733267880336e+02, 4.29008140027567833386e+02, 1.08635005541779435134e+02, 6.57024977031928170135e+00, -6.04244152148580987438e-02];
+const RB = [-9.86494292470009928597e-03, -7.99283237680523006574e-01, -1.77579549177547519889e+01, -1.60636384855821916062e+02, -6.37566443368389627722e+02, -1.02509513161107724954e+03, -4.83519191608651397019e+02];
+const SB = [1, 3.03380607434824582924e+01, 3.25792512996573918826e+02, 1.53672958608443695994e+03, 3.19985821950859553908e+03, 2.55305040643316442583e+03, 4.74528541206955367215e+02, -2.24409524465858183362e+01];
+const TINY = 2.2250738585072014e-308;
+
+// c[0] + s * (c[1] + s * (... + s * c[n]))
+function poly(c, s) {
+  let r = c[c.length - 1];
+  for (let i = c.length - 2; i >= 0; i--) r = c[i] + s * r;
+  return r;
+}
+
+const f64 = new Float64Array(1);
+const u32 = new Uint32Array(f64.buffer);
+function highWord(x) {
+  f64[0] = x;
+  return u32[1];
+}
+function clearLowWord(x) {
+  f64[0] = x;
+  u32[0] = 0;
+  return f64[0];
+}
+
+function erfc1(x) {
+  const s = Math.abs(x) - 1;
+  return 1 - ERX - poly(PA, s) / poly(QA, s);
+}
+
+function erfc2(ix, x) {
+  if (ix < 0x3ff40000) return erfc1(x);
+  x = Math.abs(x);
+  const s = 1 / (x * x);
+  const [r, q] = ix < 0x4006db6d ? [poly(RA, s), poly(SA, s)] : [poly(RB, s), poly(SB, s)];
+  const z = clearLowWord(x);
+  return Math.exp(-z * z - 0.5625) * Math.exp((z - x) * (z + x) + r / q) / x;
+}
+
+function erf(x) {
+  const hx = highWord(x), sign = hx >>> 31, ix = hx & 0x7fffffff;
+  if (ix >= 0x7ff00000) return 1 - 2 * sign + 1 / x;
+  if (ix < 0x3feb0000) {
+    if (ix < 0x3e300000) return 0.125 * (8 * x + EFX8 * x);
+    const z = x * x;
+    return x + x * (poly(PP, z) / poly(QQ, z));
+  }
+  const y = ix < 0x40180000 ? 1 - erfc2(ix, x) : 1 - TINY;
+  return sign ? -y : y;
+}
+
+function erfc(x) {
+  const hx = highWord(x), sign = hx >>> 31, ix = hx & 0x7fffffff;
+  if (ix >= 0x7ff00000) return 2 * sign + 1 / x;
+  if (ix < 0x3feb0000) {
+    if (ix < 0x3c700000) return 1 - x;
+    const z = x * x;
+    const y = poly(PP, z) / poly(QQ, z);
+    if (sign || ix < 0x3fd00000) return 1 - (x + x * y);
+    return 0.5 - (x - 0.5 + x * y);
+  }
+  if (ix < 0x403c0000) return sign ? 2 - erfc2(ix, x) : erfc2(ix, x);
+  return sign ? 2 - TINY : TINY * TINY;
+}
+
+// json.loads: the parser of pyrt (src/pyrt/lib/rupy_json.rs), with CPython's messages.
+// A value is {k: "null" | "bool" | "int" | "float" | "str" | "list" | "dict", v};
+// a dict's v is its [key, value] entries in order.
+let jsonAt = [];
+const jsonTop = () => jsonAt[jsonAt.length - 1];
+
+function jsonText(j) {
+  if (j.k === "float") return Number.isNaN(j.v) ? "NaN" : j.v === Infinity ? "Infinity" : j.v === -Infinity ? "-Infinity" : floatRepr(j.v);
+  return String(j.v);
+}
+
+function jsonWant(k) {
+  const j = jsonTop();
+  if (j.k === k) return j;
+  const what = j.k === "null" ? "null" : j.k === "list" || j.k === "dict" || j.k === "str" ? "a " + j.k : j.k + " " + jsonText(j);
+  throw err("TypeError", "json.loads(): expected " + k + ", got " + what);
+}
+
+function jsonParse(src) {
+  const s = [...src];
+  let i = 0;
+  const fail = (what, at) => {
+    const before = s.slice(0, Math.min(at, s.length));
+    const line = before.filter((c) => c === "\n").length + 1;
+    const col = at - (before.lastIndexOf("\n") + 1) + 1;
+    return err("ValueError", `${what}: line ${line} column ${col} (char ${at})`);
+  };
+  const ws = () => {
+    while (i < s.length && " \t\n\r".includes(s[i])) i++;
+  };
+  const word = (w) => {
+    const cs = [...w];
+    if (cs.every((c, j) => s[i + j] === c)) {
+      i += cs.length;
+      return true;
+    }
+    return false;
+  };
+  const digit = (c) => c !== undefined && c >= "0" && c <= "9";
+  const hex4 = () => {
+    if (i + 4 > s.length) return null;
+    const h = s.slice(i, i + 4).join("");
+    if (!/^[0-9a-fA-F]{4}$/.test(h)) return null;
+    i += 4;
+    return parseInt(h, 16);
+  };
+  const char = (u) => (u >= 0xd800 && u < 0xe000 ? "\ufffd" : String.fromCodePoint(u));
+  const string = () => {
+    const start = i++;
+    let out = "";
+    for (;;) {
+      if (i >= s.length) throw fail("Unterminated string starting at", start);
+      const c = s[i++];
+      if (c === '"') return out;
+      if (c === "\\") {
+        if (i >= s.length) throw fail("Unterminated string starting at", start);
+        const e = s[i++];
+        const simple = { '"': '"', "\\": "\\", "/": "/", b: "\b", f: "\f", n: "\n", r: "\r", t: "\t" }[e];
+        if (simple !== undefined) out += simple;
+        else if (e === "u") {
+          const u = hex4();
+          if (u === null) throw fail("Invalid \\uXXXX escape", i - 1);
+          if (u >= 0xd800 && u < 0xdc00 && s[i] === "\\" && s[i + 1] === "u") {
+            const save = i;
+            i += 2;
+            const l = hex4();
+            if (l !== null && l >= 0xdc00 && l < 0xe000) {
+              out += String.fromCodePoint(0x10000 + ((u - 0xd800) << 10) + (l - 0xdc00));
+              continue;
+            }
+            i = save;
+          }
+          out += char(u);
+        } else throw fail("Invalid \\escape", i - 2);
+      } else if (c.codePointAt(0) < 0x20) throw fail("Invalid control character at", i - 1);
+      else out += c;
+    }
+  };
+  const number = () => {
+    const start = i;
+    if (s[i] === "-") i++;
+    if (s[i] === "0") i++;
+    else if (digit(s[i])) while (digit(s[i])) i++;
+    else throw fail("Expecting value", start);
+    let float = false;
+    if (s[i] === "." && digit(s[i + 1])) {
+      float = true;
+      i++;
+      while (digit(s[i])) i++;
+    }
+    if (s[i] === "e" || s[i] === "E") {
+      const save = i++;
+      if (s[i] === "+" || s[i] === "-") i++;
+      if (digit(s[i])) {
+        float = true;
+        while (digit(s[i])) i++;
+      } else i = save;
+    }
+    const text = s.slice(start, i).join("");
+    if (!float) {
+      const n = BigInt(text);
+      if (n >= I64_MIN && n <= I64_MAX) return { k: "int", v: n };
+    }
+    return { k: "float", v: Number(text) };
+  };
+  const value = () => {
+    const start = i;
+    const c = s[i];
+    if (c === "{") return dict();
+    if (c === "[") return list();
+    if (c === '"') return { k: "str", v: string() };
+    if (c === "n" && word("null")) return { k: "null", v: null };
+    if (c === "t" && word("true")) return { k: "bool", v: true };
+    if (c === "f" && word("false")) return { k: "bool", v: false };
+    if (c === "N" && word("NaN")) return { k: "float", v: NaN };
+    if (c === "I" && word("Infinity")) return { k: "float", v: Infinity };
+    if (c === "-" && word("-Infinity")) return { k: "float", v: -Infinity };
+    if (c === "-" || digit(c)) return number();
+    throw fail("Expecting value", start);
+  };
+  const list = () => {
+    i++;
+    const v = [];
+    ws();
+    if (s[i] === "]") {
+      i++;
+      return { k: "list", v };
+    }
+    for (;;) {
+      ws();
+      v.push(value());
+      ws();
+      if (s[i] === ",") i++;
+      else if (s[i] === "]") {
+        i++;
+        return { k: "list", v };
+      } else throw fail("Expecting ',' delimiter", i);
+    }
+  };
+  const dict = () => {
+    i++;
+    const m = new Map();
+    const done = () => ({ k: "dict", v: [...m.entries()] });
+    ws();
+    if (s[i] === "}") {
+      i++;
+      return done();
+    }
+    for (;;) {
+      ws();
+      if (s[i] !== '"') throw fail("Expecting property name enclosed in double quotes", i);
+      const k = string();
+      ws();
+      if (s[i] !== ":") throw fail("Expecting ':' delimiter", i);
+      i++;
+      ws();
+      m.set(k, value());
+      ws();
+      if (s[i] === ",") i++;
+      else if (s[i] === "}") {
+        i++;
+        return done();
+      } else throw fail("Expecting ',' delimiter", i);
+    }
+  };
+  ws();
+  const v = value();
+  ws();
+  if (i < s.length) throw fail("Extra data", i);
+  return v;
+}
+
+// math.fsum: Shewchuk's exact partial sums, rounded as CPython rounds them
+let fsum = null;
+
+function fsumAdd(st, x0) {
+  const p = st.p;
+  let x = x0, i = 0;
+  for (let j = 0; j < p.length; j++) {
+    let y = p[j];
+    if (Math.abs(x) < Math.abs(y)) [x, y] = [y, x];
+    const hi = x + y;
+    const lo = y - (hi - x);
+    if (lo !== 0) p[i++] = lo;
+    x = hi;
+  }
+  p.length = i;
+  if (x !== 0) {
+    if (!Number.isFinite(x)) {
+      if (Number.isFinite(x0)) throw err("OverflowError", "intermediate overflow in fsum");
+      if (!Number.isNaN(x0)) st.inf += x0;
+      st.special += x0;
+      p.length = 0;
+    } else {
+      p.push(x);
+    }
+  }
+  return null;
+}
+
+function fsumEnd(st) {
+  if (st.special !== 0) {
+    if (Number.isNaN(st.inf)) throw err("ValueError", "-inf + inf in fsum");
+    return st.special;
+  }
+  const p = st.p;
+  let n = p.length;
+  if (n === 0) return 0;
+  let hi = p[--n], lo = 0;
+  while (n > 0) {
+    const x = hi, y = p[--n];
+    hi = x + y;
+    lo = y - (hi - x);
+    if (lo !== 0) break;
+  }
+  if (n > 0 && ((lo < 0 && p[n - 1] < 0) || (lo > 0 && p[n - 1] > 0))) {
+    const y = lo * 2, x = hi + y;
+    if (y === x - hi) hi = x;
+  }
+  return hi;
+}
 
 // ------------------------------------------------------------ str methods
 
@@ -1025,6 +1483,27 @@ export async function run(bytes, io = {}) {
         } else out += ch;
       }
       return out + '"';
+    },
+    // json.loads: parse, then the program reads the value at the cursor by its type
+    "json.loads": (s) => {
+      jsonAt = [jsonParse(s)];
+      return null;
+    },
+    "json.null": () => jsonTop().k === "null",
+    "json.int": () => jsonWant("int").v,
+    "json.float": () => jsonWant("float").v,
+    "json.bool": () => jsonWant("bool").v,
+    "json.text": () => jsonWant("str").v,
+    "json.len": (dict) => BigInt(jsonWant(dict ? "dict" : "list").v.length),
+    "json.key": (i) => jsonTop().v[Number(i)][0],
+    "json.enter": (i) => {
+      const t = jsonTop();
+      jsonAt.push(t.k === "dict" ? t.v[Number(i)][1] : t.v[Number(i)]);
+      return null;
+    },
+    "json.exit": () => {
+      jsonAt.pop();
+      return null;
     },
     bin: (n) => based(n, 2, "0b"),
     hex: (n) => based(n, 16, "0x"),

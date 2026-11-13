@@ -97,9 +97,17 @@ class hierarchy, `@shared` in a class hierarchy.
 `pairwise`), `functools` (`reduce`, `cache`, `lru_cache(maxsize=None)`), `random`
 (CPython's Mersenne Twister: the same seed gives the same numbers), `re` (literal
 patterns, checked when translating, on the `regex` crate), `sys` (`argv`, `exit`,
-`stdin`, `stdout.write`, `maxsize`, `setrecursionlimit`), `time`, `json.dumps`, `os`
+`stdin`, `stdout.write`, `maxsize`, `setrecursionlimit`), `time`, `json.dumps` / `json.loads`, `os`
 (`path.exists`, `path.join`, `remove`), `dataclasses`, `typing`. Text files with `open`
 (`read`, `readline`, `readlines`, iteration, `write`, `writelines`).
+`json.loads` returns the type declared for its result (`xs: list[int] = json.loads(s)`):
+int, float, str, bool, `Optional`, `list` and `dict[str, ...]` of them; JSON of another
+type raises TypeError (a JSON `1` is not a float: CPython would keep the int), and JSON of
+mixed types is read with `rupy.json.Json`. `math.gamma`, `lgamma`, `erf`, `erfc`, `asinh`,
+`acosh`, `atanh` give CPython's numbers to the last bit on the Rust backend (gamma and
+lgamma are CPython's Lanczos code, fused multiply-adds included; the others call the C
+library as CPython does); on wasm, erf and erfc are FreeBSD's and exp / pow are
+JavaScript's, so the last digit may differ. `math.fsum` is exact on both.
 
 In `re`, lookaround, backreferences, `$` without `re.MULTILINE` and function
 replacements are rejected (the regex crate differs from Python there).

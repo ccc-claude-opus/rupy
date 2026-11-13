@@ -98,6 +98,17 @@ impl Front {
         }
     }
 
+    /// A type `json.loads` can return: JSON scalars, lists, dicts with str keys, and Optional of them.
+    fn json_target(&self, t: &Ty, line: u32) -> Res<()> {
+        match self.norm(t) {
+            Ty::Int | Ty::Float | Ty::Str | Ty::Bool => Ok(()),
+            Ty::Optional(t) | Ty::List(t) => self.json_target(&t, line),
+            Ty::Dict(k, v, DK::Plain) if self.norm(&k) == Ty::Str => self.json_target(&v, line),
+            t => err(line, format!("json.loads() into {} is not supported", self.tn(&t)))
+                .map_err(|e| e.hint("JSON gives int, float, str, bool, None, list and dict[str, ...]; for mixed types use rupy.json.Json")),
+        }
+    }
+
     pub(super) fn std_call(&mut self, q: &str, args: &ast::Arguments, want: Option<&Ty>, line: u32) -> Res<Expr> {
         use ExprKind as K;
         if let Some(m) = q.strip_prefix("math.") {
@@ -423,7 +434,20 @@ impl Front {
                 }
                 (Ty::Str, name, v)
             }
-            "json.loads" => return err(line, "json.loads() is outside the typed subset (its result has no static type)"),
+            "json.loads" => {
+                n_kw(self, &[])?;
+                self.nargs(args, 1, 1, "loads", line)?;
+                let s = self.arg(args, 0, &Ty::Str, "json.loads() argument")?;
+                let t = match want.map(|w| self.norm(w)) {
+                    Some(t) if !matches!(t, Ty::Var(_)) => t,
+                    _ => {
+                        return err(line, "json.loads() needs the type of its result")
+                            .map_err(|e| e.hint("declare it: `xs: list[int] = json.loads(s)`; JSON of mixed types: rupy.json.Json"))
+                    }
+                };
+                self.json_target(&t, line)?;
+                (t, name, vec![s])
+            }
             _ => {
                 // declared by the package stub of the module: `os.environ.get` is `environ_get` in `os.pyi`
                 if let Some(f) = self.std_stub_name(q) {

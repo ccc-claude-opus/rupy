@@ -896,3 +896,75 @@ pub fn product3<A: Clone, B: Clone, C: Clone>(a: &[A], b: &[B], c: &[C]) -> Vec<
 pub fn pairwise<T: Clone>(xs: &[T]) -> Vec<(T, T)> {
     xs.windows(2).map(|w| (w[0].clone(), w[1].clone())).collect()
 }
+
+/// `json.loads(s)` into the type the program declares for its result
+/// (`xs: list[int] = json.loads(s)`). JSON of another type raises TypeError:
+/// CPython would return it as it is, and the program would not do the same.
+pub trait FromJson: Sized {
+    fn from_json(j: crate::pyrt::lib::rupy_json::Json) -> Result<Self, String>;
+}
+
+fn json_mismatch(want: &str, got: &crate::pyrt::lib::rupy_json::Json) -> String {
+    use crate::pyrt::lib::rupy_json::Json as J;
+    let what = match got {
+        J::Null => "null".to_string(),
+        J::List(_) => "a list".to_string(),
+        J::Dict(_) => "a dict".to_string(),
+        J::Str(_) => "a str".to_string(),
+        j => format!("{} {}", j.kind(), j.text()),
+    };
+    format!("json.loads(): expected {}, got {}", want, what)
+}
+
+macro_rules! from_json_scalar {
+    ($t:ty, $name:literal, $v:ident) => {
+        impl FromJson for $t {
+            fn from_json(j: crate::pyrt::lib::rupy_json::Json) -> Result<Self, String> {
+                match j {
+                    crate::pyrt::lib::rupy_json::Json::$v(x) => Ok(x),
+                    j => Err(json_mismatch($name, &j)),
+                }
+            }
+        }
+    };
+}
+from_json_scalar!(i64, "int", Int);
+from_json_scalar!(f64, "float", Float);
+from_json_scalar!(bool, "bool", Bool);
+from_json_scalar!(String, "str", Str);
+
+impl<T: FromJson> FromJson for Option<T> {
+    fn from_json(j: crate::pyrt::lib::rupy_json::Json) -> Result<Self, String> {
+        match j {
+            crate::pyrt::lib::rupy_json::Json::Null => Ok(None),
+            j => T::from_json(j).map(Some),
+        }
+    }
+}
+
+impl<T: FromJson> FromJson for Vec<T> {
+    fn from_json(j: crate::pyrt::lib::rupy_json::Json) -> Result<Self, String> {
+        match j {
+            crate::pyrt::lib::rupy_json::Json::List(xs) => xs.into_iter().map(T::from_json).collect(),
+            j => Err(json_mismatch("list", &j)),
+        }
+    }
+}
+
+impl<T: FromJson> FromJson for IndexMap<String, T> {
+    fn from_json(j: crate::pyrt::lib::rupy_json::Json) -> Result<Self, String> {
+        match j {
+            crate::pyrt::lib::rupy_json::Json::Dict(d) => {
+                d.into_iter().map(|(k, v)| T::from_json(v).map(|v| (k, v))).collect()
+            }
+            j => Err(json_mismatch("dict", &j)),
+        }
+    }
+}
+
+pub fn loads<T: FromJson>(s: &str) -> T {
+    match crate::pyrt::lib::rupy_json::Json::loads(s) {
+        Ok(j) => T::from_json(j).unwrap_or_else(|m| raise("TypeError", &m)),
+        Err(e) => raise("ValueError", &e.msg),
+    }
+}

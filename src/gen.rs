@@ -4644,6 +4644,14 @@ impl<'a> FGen<'a> {
                     v(format!("pyrt::input({})", self.borrow_str(&a[0])?))
                 }
             }
+            "math.fsum" => {
+                let code = self.iter_values(&a[0])?;
+                if a[0].ty == Ty::Int {
+                    v(format!("pyrt::math::fsum({}.map(|x| x as f64))", code))
+                } else {
+                    v(format!("pyrt::math::fsum({})", bare(code)))
+                }
+            }
             n if n.starts_with("math.") => self.math(&n[5..], a)?,
             "exc.field" => {
                 let x = self.ex(&a[0])?;

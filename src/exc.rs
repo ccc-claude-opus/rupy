@@ -89,6 +89,9 @@ pub fn op_kinds(e: &Expr) -> (Vec<&'static str>, Vec<&'static str>) {
             // only an empty separator raises
             "str.split" if matches!(&a[1].kind, K::Str(sep) if !sep.is_empty()) => (vec![], vec![]),
             "str.split" => (vec![], vec!["ValueError"]),
+            "json.loads" => (vec![], vec!["ValueError", "TypeError"]),
+            "math.acosh" | "math.atanh" => (vec![], vec!["ValueError"]),
+            "math.gamma" | "math.lgamma" | "math.fsum" => (vec![], vec!["ValueError", "OverflowError"]),
             "math.exp" | "math.expm1" | "math.floor" | "math.ceil" | "math.trunc" | "round" | "math.sinh" | "math.cosh" => {
                 (vec![], vec!["ValueError", "OverflowError"])
             }

@@ -276,6 +276,7 @@ impl FGen<'_> {
             ("time", "time") => v("pyrt::stdlib::time()".into()),
             ("time", "perf_counter" | "monotonic") => v("pyrt::stdlib::perf_counter()".into()),
             ("time", "sleep") => v(format!("pyrt::stdlib::sleep({})", self.val(&a[0])?.code)),
+            ("json", "loads") => v(format!("pyrt::stdlib::loads::<{}>({})", self.ty(&e.ty), self.borrow_str(&a[0])?)),
             ("json", "dumps") => v(format!("pyrt::stdlib::dumps({})", self.borrow(&a[0])?)),
             _ => return err(e.line, format!("internal: unknown builtin {}", name)),
         })

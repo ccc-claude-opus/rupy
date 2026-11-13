@@ -5,7 +5,7 @@ use super::{unsupported, Lab, Res, K, W};
 use crate::ir::*;
 
 /// Host math operations of one argument.
-const MATH_OPS: &[&str] = &["sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "exp", "log", "log2", "log10", "expm1", "log1p", "cbrt", "degrees", "radians", "gamma", "lgamma", "erf", "erfc"];
+const MATH_OPS: &[&str] = &["sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "exp", "log", "log2", "log10", "expm1", "log1p", "cbrt", "degrees", "radians", "gamma", "lgamma", "erf", "erfc", "asinh", "acosh", "atanh"];
 
 impl<'a> W<'a> {
     pub fn builtin(&mut self, name: &str, a: &[Expr], e: &Expr) -> Res<()> {
@@ -428,6 +428,25 @@ impl<'a> W<'a> {
                 let f = self.rt_read_line()?;
                 self.c().call(f);
             }
+            "math.fsum" => {
+                // the host keeps the partial sums: begin, add each value, end
+                let (l, n, et) = self.iter_list(&a[0])?;
+                self.host_call("fsum_begin", &Ty::None)?;
+                let i = self.fx.local(Val::I32);
+                self.c().i32_const(0).local_set(i);
+                self.c().block(Block::Empty).loop_(Block::Empty);
+                self.c().local_get(i).local_get(n).i32_ge_s().br_if(1);
+                self.c().local_get(l).local_get(i).i64_extend_i32_s();
+                self.list_get(&et)?;
+                if et == Ty::Int {
+                    self.c().f64_convert_i64_s();
+                }
+                self.host_arg(&Ty::Float)?;
+                self.host_call("fsum_add", &Ty::None)?;
+                self.c().local_get(i).i32_const(1).i32_add().local_set(i).br(0);
+                self.c().end().end();
+                self.host_call("fsum_end", &Ty::Float)?;
+            }
             n if n.starts_with("math.") => self.math_fn(&n[5..], a)?,
             n if n.starts_with("random.") => self.random_fn(n, a, e)?,
             n if n.starts_with("itertools.") => self.itertools_fn(n, a, e)?,
@@ -455,6 +474,12 @@ impl<'a> W<'a> {
                 let out = self.rt_out()?;
                 self.expr(&a[0])?;
                 self.c().i32_const(1).call(out);
+            }
+            "json.loads" => {
+                let f = self.rt_json_load(&e.ty)?;
+                self.host_args(a, &[Ty::Str])?;
+                self.host_call("json.loads", &Ty::None)?;
+                self.c().call(f);
             }
             "json.dumps" => {
                 let f = self.rt_json(&a[0].ty)?;

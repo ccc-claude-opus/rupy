@@ -4649,7 +4649,18 @@ impl Front {
 
     fn math(&mut self, name: &str, args: &ast::Arguments, line: u32) -> Res<Expr> {
         self.kw(args, &[], line)?;
-        let f1: &[&str] = &["sqrt", "exp", "sin", "cos", "tan", "asin", "acos", "atan", "fabs", "log2", "log10", "sinh", "cosh", "tanh", "log1p", "expm1"];
+        let f1: &[&str] = &["sqrt", "exp", "sin", "cos", "tan", "asin", "acos", "atan", "fabs", "log2", "log10", "sinh", "cosh", "tanh", "log1p", "expm1", "gamma", "lgamma", "erf", "erfc", "asinh", "acosh", "atanh"];
+        if name == "fsum" {
+            self.nargs(args, 1, 1, "math.fsum", line)?;
+            let (it, t) = self.iter_arg(&args.args[0])?;
+            if matches!(self.norm(&t), Ty::Var(_)) {
+                self.unify(&t, &Ty::Float);
+            }
+            if !matches!(self.norm(&t), Ty::Float | Ty::Int) {
+                return err(line, format!("math.fsum() of {} is not supported", self.tn(&t)));
+            }
+            return Ok(self.mk(line, Ty::Float, ExprKind::Builtin("math.fsum", vec![it])));
+        }
         let (n, ps, rt): (&'static str, Vec<Ty>, Ty) = match name {
             n if f1.contains(&n) => (leak(format!("math.{}", n)), vec![Ty::Float], Ty::Float),
             "log" => {
