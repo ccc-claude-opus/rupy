@@ -66,7 +66,8 @@ and `try` / `finally`; comprehensions, f-strings, `match`, `with open`, generato
 nested functions with `nonlocal`, lambdas and `Callable`; generic functions, `Protocol`
 and union parameters (compiled per argument type); `math`, `collections`, `heapq`,
 `bisect`, `itertools`, `functools`, `random` (same numbers as CPython for the same
-seed), `re`, `sys`, `time`, `json.dumps` / `json.loads`, `os.path`.
+seed), `re`, `sys`, `time`, `json.dumps` / `json.loads`, `os.path`; and, written in rupy
+(`pylib/`), `statistics`, `fractions`, `csv` and `io.StringIO`.
 
 How some constructs come out (more in [docs/cases](docs/cases/README.md)):
 

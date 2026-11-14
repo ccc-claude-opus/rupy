@@ -227,7 +227,7 @@ impl Front {
                 self.type_env = old_env;
                 self.restore(saved);
                 let fid = r?;
-                self.p.funcs[fid].name = format!("{}_{}", name, sfx.join("_"));
+    self.p.funcs[fid].name = format!("{}_{}", name, sfx.join("_"));
                 self.instances.insert(key, fid);
                 self.pending.push((fid, d, env));
                 fid
@@ -236,6 +236,80 @@ impl Front {
         let a = self.call_args(fid, args, false, line)?;
         let t = self.p.funcs[fid].ret.clone();
         Ok(self.mk(line, t, ExprKind::Call(fid, a)))
+    }
+
+    /// Is `d` a method with `X | Y` parameters?
+    pub(super) fn union_method(&self, d: &ast::StmtFunctionDef) -> bool {
+        d.type_params.is_none() && d.parameters.args.iter().chain(d.parameters.kwonlyargs.iter()).any(|p| p.parameter.annotation.as_deref().is_some_and(is_union))
+    }
+
+    /// A method with `X | Y` parameters: one overload per combination of the
+    /// members (`__add___int`, `__add___fraction`), picked by the argument types.
+    pub(super) fn union_method_sig(&mut self, d: &ast::StmtFunctionDef, cid: ClassId) -> Res<()> {
+        let line = self.line(d);
+        let name = d.name.id.as_str();
+        if name == "__init__" {
+            return err(line, "union types are not supported in __init__'s parameters")
+                .map_err(|e| e.hint("add a @classmethod for each type"));
+        }
+        if self.p.classes[cid].base.is_some() || !self.p.classes[cid].subs.is_empty() {
+            return err(line, "methods with union parameters are not supported in a class hierarchy");
+        }
+        if self.p.classes[cid].method(name).is_some() {
+            return err(line, format!("method `{}` is defined twice", name));
+        }
+        let leaked: &'static ast::StmtFunctionDef = Box::leak(Box::new(d.clone()));
+        // every combination of the members of the union parameters
+        let mut envs: Vec<(HashMap<String, Ty>, Vec<String>)> = vec![(HashMap::new(), vec![])];
+        for p in d.parameters.args.iter().chain(d.parameters.kwonlyargs.iter()) {
+            let Some(a) = p.parameter.annotation.as_deref().filter(|a| is_union(a)) else { continue };
+            let key = format!("U:{}", self.src[a.range()].trim());
+            let mut next = vec![];
+            for m in members(a) {
+                let t = self.ann(m)?;
+                for (env, sfx) in &envs {
+                    let (mut env, mut sfx) = (env.clone(), sfx.clone());
+                    env.insert(key.clone(), t.clone());
+                    sfx.push(suffix(&t, &self.p));
+                    next.push((env, sfx));
+                }
+            }
+            envs = next;
+        }
+        // the instance for this class's own objects first, under the method's
+        // name (`sort` and `==` call `__lt__` / `__eq__` by name); the others
+        // get the types in their names (`__add___int`)
+        let own = Ty::Class(cid);
+        envs.sort_by_key(|(env, _)| std::cmp::Reverse(env.values().filter(|t| **t == own).count()));
+        let mut first = None;
+        for (env, sfx) in envs {
+            let old = std::mem::replace(&mut self.type_env, env.clone());
+            let r = self.signature(d, Some(cid));
+            self.type_env = old;
+            let fid = r?;
+            if first.is_some() {
+                self.p.funcs[fid].name = format!("{}_{}", name, sfx.join("_"));
+            }
+            if name.starts_with("__") {
+                if !dunder::SUPPORTED.contains(&name) {
+                    return err(line, format!("special method `{}` is not supported", name));
+                }
+                self.check_dunder(cid, fid, line)?;
+            }
+            match first {
+                None => {
+                    first = Some(fid);
+                    self.p.classes[cid].methods.push((name.to_string(), fid));
+                }
+                Some(f0) => {
+                    // also a method, for `gen` (`method(name)` finds the first)
+                    self.overloads.entry(f0).or_insert_with(|| vec![f0]).push(fid);
+                    self.p.classes[cid].methods.push((name.to_string(), fid));
+                }
+            }
+            self.pending.push((fid, leaked, env));
+        }
+        Ok(())
     }
 
     /// Lowers the bodies of the instances created so far (and those they create).
@@ -258,13 +332,35 @@ impl Front {
                 let [AExpr::Name(x), cls] = &c.arguments.args[..] else { return Ok(None) };
                 let Some(v) = self.lookup(x.id.as_str()) else { return Ok(None) };
                 let t = self.norm(&self.var(v).ty);
-                if matches!(t, Ty::Class(_) | Ty::Obj(_) | Ty::Exc | Ty::Optional(_) | Ty::Var(_)) {
-                    return Ok(None);
-                }
                 let names: Vec<&AExpr> = match cls {
                     AExpr::Tuple(tu) => tu.elts.iter().collect(),
                     x => vec![x],
                 };
+                // an object is no builtin value (`other: Fraction | int`)
+                const BUILTIN: &[&str] = &["int", "float", "str", "bool", "list", "dict", "set", "tuple"];
+                if matches!(t, Ty::Class(_) | Ty::Obj(_))
+                    && names.iter().all(|n| matches!(n, AExpr::Name(n) if BUILTIN.contains(&n.id.as_str()) && !self.classes.contains_key(n.id.as_str())))
+                {
+                    return Ok(Some(false));
+                }
+                // an object of a class without subclasses: its class is known
+                if let Ty::Class(c) = t {
+                    if self.p.classes[c].subs.is_empty() {
+                        let mut any = false;
+                        for n in &names {
+                            let AExpr::Name(n) = n else { return Ok(None) };
+                            match self.classes.get(n.id.as_str()) {
+                                Some(&d) => any |= c == d || self.p.is_sub(c, d),
+                                None if BUILTIN.contains(&n.id.as_str()) => {}
+                                None => return Ok(None),
+                            }
+                        }
+                        return Ok(Some(any));
+                    }
+                }
+                if matches!(t, Ty::Class(_) | Ty::Obj(_) | Ty::Exc | Ty::Optional(_) | Ty::Var(_)) {
+                    return Ok(None);
+                }
                 let mut any = false;
                 for n in names {
                     let AExpr::Name(n) = n else { return Ok(None) };

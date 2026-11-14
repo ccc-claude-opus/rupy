@@ -5,7 +5,7 @@ use super::{unsupported, Lab, Res, K, W};
 use crate::ir::*;
 
 /// Host math operations of one argument.
-const MATH_OPS: &[&str] = &["sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "exp", "log", "log2", "log10", "expm1", "log1p", "cbrt", "degrees", "radians", "gamma", "lgamma", "erf", "erfc", "asinh", "acosh", "atanh"];
+const MATH_OPS: &[&str] = &["sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "exp", "log", "log2", "log10", "expm1", "log1p", "cbrt", "degrees", "radians", "gamma", "lgamma", "erf", "erfc", "asinh", "acosh", "atanh", "ulp"];
 
 impl<'a> W<'a> {
     pub fn builtin(&mut self, name: &str, a: &[Expr], e: &Expr) -> Res<()> {
@@ -1067,7 +1067,7 @@ impl<'a> W<'a> {
                 self.c().local_get(y).f64_abs().f64_const(f64::INFINITY).f64_ne().i32_and().i32_or();
             }
             "log2args" => self.math("log_base")?,
-            "atan2" | "hypot" | "pow" => self.math(n)?,
+            "atan2" | "hypot" | "pow" | "nextafter" => self.math(n)?,
             // math_fn has already pushed the three f64 args; pop them but push
             // in order (like rt::math) since host_args are registered in order
             "fma" => {

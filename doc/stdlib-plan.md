@@ -1,6 +1,6 @@
 # 標準函數庫與外部套件的方針
 
-狀態（2026-11-14）：方針已定。wasm 已支援函數當值與產生器。「待補」表第 1 優先已完成（math 的 8 個函數與 `json.loads`），第 2 優先以後還沒做（`dataclasses` 已可使用）。
+狀態（2026-11-14）：方針已定。wasm 已支援函數當值與產生器。「待補」表第 1 優先已完成（math 的 8 個函數與 `json.loads`）；第 2 優先完成 `statistics`、`fractions`、`csv`、`io.StringIO`，`datetime`、`pathlib`、`decimal` 還沒做（`dataclasses` 已可使用）。
 
 ## 決定
 
@@ -14,6 +14,7 @@
 
 - 內建在翻譯器：`math`（含 `gamma`、`lgamma`、`erf`、`erfc`、`fsum`、`asinh`、`acosh`、`atanh`）、`collections`、`heapq`、`bisect`、`itertools`、`functools`、`random`、`re`、`sys`、`time`、`json.dumps`、`json.loads`、`os.path`。
 - stub（`src/lib/`）：`os`、`sys`、`time`、`subprocess`、`shlex`、`fnmatch`、`html`。
+- 用 rupy 寫成（`pylib/`，和 rstatistics 一樣內建在 rupy 裡）：`statistics`、`fractions`、`csv`、`io`（`StringIO`）。
 
 ## 待補的標準函數庫（依優先順序）
 
@@ -21,7 +22,8 @@
 | --- | --- | --- |
 | 1 | ~~`math.gamma`、`lgamma`、`erf`、`erfc`、`fsum`、`atanh`、`asinh`、`acosh`~~ | 已完成（2026-11-14），見下方說明 |
 | 1 | ~~`json.loads`~~ | 已完成（2026-11-14），見下方說明 |
-| 2 | `csv`、`io.StringIO`、`pathlib`、`datetime`、`fractions`、`decimal`、`statistics` | 資料處理 |
+| 2 | ~~`csv`、`io.StringIO`、`fractions`、`statistics`~~ | 已完成（2026-11-14），見下方說明 |
+| 2 | `datetime`、`pathlib`、`decimal` | 資料處理；`datetime` 可照搬 CPython 的 `_pydatetime.py`，`decimal` 工作量最大 |
 | 3 | `string`、`textwrap`、`copy`、`operator`、`argparse` | 常用工具 |
 | 3 | `enum`（`dataclasses` 已可使用） | |
 | 4 | `base64`、`hashlib`、`struct`、`urllib.parse`、`uuid` | 編碼與雜湊 |
@@ -39,6 +41,30 @@
   - JSON 的型別和宣告不合時，丟出 TypeError。例如宣告 float 卻讀到 `1`：CPython 會保留 int，印出來是 `1` 而不是 `1.0`，為了不產生和 CPython 不同的結果，rupy 直接報錯。
   - 型別混雜的 JSON 請用 `rupy.json.Json`。
   - 解析錯誤是 ValueError，訊息和 CPython 相同。CPython 實際丟出的是它的子類別 `json.JSONDecodeError`，所以沒有被攔截時，traceback 印出的類別名稱不同。
+
+### 第 2 優先的做法與限制（2026-11-14）
+
+做法：用 rupy 寫成 `pylib/MODULE/__init__.py`，由 `src/pkgsrc.rs` 內建，兩個後端一起編譯，CPython 執行同一支測試時用真的模組對照。測試放在 `tests/corpus/py/stdlib/`（`tests/corpus/py/` 有 `numbers.py`，會擋住 CPython 的 `numbers` 模組）。
+
+- `statistics`：CPython 用分數把資料加總得到精確值，最後只捨入一次。rupy 沒有大整數，改用浮點數展開式（Shewchuk，和 `math.fsum` 同一種），加總和平方和都是精確的；除法和開根號以「與中點比較」修正到正確捨入。所以 `mean`、`variance`、`pvariance`、`stdev`、`pstdev`、`harmonic_mean` 和 CPython 逐位元相同（另用 400 組隨機資料比對過）。
+  - 資料是 `list[float]`。`mean`、`median`、`variance` 等在 CPython 收到 int 時，會依數值回傳 int 或 float，型別不固定，所以不收 int 串列。`fmean`、`stdev`、`pstdev`、`geometric_mean`、`median_grouped` 一律回傳 float，也收 int。
+  - `mode`、`multimode`、`median_low`、`median_high` 收任何串列。
+  - `NormalDist`：CPython 的 `inv_cdf` 是 C 寫的，clang 會把 `a * r + b` 合併成 FMA，rupy 用 `math.fma` 照做。`samples`、`kde` 沒做。
+  - 已知差異：`harmonic_mean` 遇到 0 時 CPython 回傳 int 的 0，rupy 回傳 0.0；絕對值超過約 1e150 的資料，精確平方和會溢位，rupy 丟出 OverflowError。
+- `fractions`：`Fraction` 的分子、分母是 64 位元整數，超過時丟出 OverflowError（和 rupy 的 int 相同）。`Fraction(n, d)` 只收 int，float 用 `Fraction.from_float(x)`；不和 float 混合運算。
+  - 為此 rupy 新增「方法的聯集參數」：`def __add__(self, other: Fraction | int)` 依每個成員各編譯一份，不能用在 `__init__` 和類別階層。
+- `csv`：照搬 CPython `_csv` 的狀態機與寫出規則。`reader`、`DictReader` 讀文字檔、`io.StringIO` 或字串串列；`writer`、`DictWriter` 寫到文字檔或 `io.StringIO`。
+  - 限制：讀取用產生器實作，而 rupy 的產生器裡丟出的例外不能被呼叫端攔截，所以 `try: ... except csv.Error` 包住讀取的程式會在編譯時被拒絕。`QUOTE_NONNUMERIC` 讀取會產生 float，`DictReader` 欄位不足時 CPython 填 None，這兩種情況都直接報錯。
+- `io.StringIO`：`@shared` 類別，`csv.writer(buf)` 保留 `buf` 之後，原變數仍看得到寫入的內容。
+- 配套的 rupy 變更：
+  - 檔案改成共用的 handle（和 Python 一樣），所以 `csv.writer(f)` 可以保留 `f`。
+  - `open(..., newline=...)`；讀檔預設把 `\r\n` 轉成 `\n`（之前沒轉）。
+  - `TextIO` 型別註記、`math.nextafter`、`math.ulp`。
+  - `math.hypot` 改成照搬 CPython 的 `vector_norm`：之前 Rust 用 libm、wasm 用 JavaScript 的版本，最後一位數可能不同。
+- 順便修正的錯誤：
+  - 超過 2**53 的 int / int 之前捨入兩次，現在只捨入一次。
+  - 浮點數的 repr 之前可能和 CPython 差最後一位，例如 `1770740270910798.25` 印成 `.3`；現在取最短位數中最接近的值。
+  - 套件裡 dataclass 的 repr 之前帶著 `PKG__` 前綴，現在拿掉了。
 
 每個模組都要：
 

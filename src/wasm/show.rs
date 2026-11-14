@@ -265,7 +265,7 @@ impl<'a> W<'a> {
                         None if cl.dataclass => {
                             let ct = w.class_ty[c];
                             let fields: Vec<(String, Ty)> = cl.fields.iter().map(|f| (f.name.clone(), f.ty.clone())).collect();
-                            let name = cl.name.clone();
+                            let name = crate::pkgsrc::py_name(&cl.name).to_string();
                             let sb = w.fx.local(Val::Ref(Heap::Idx(sb_t)));
                             w.c().i32_const(0).call(sbn).local_set(sb);
                             lit(w, sb, &format!("{}(", name));

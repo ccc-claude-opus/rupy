@@ -472,3 +472,79 @@ pub fn fsum<I: IntoIterator<Item = f64>>(it: I) -> f64 {
     }
     hi
 }
+
+/// `math.nextafter(x, y)`: the float after x towards y
+pub fn nextafter(x: f64, y: f64) -> f64 {
+    if x.is_nan() || y.is_nan() {
+        return f64::NAN;
+    }
+    if x == y {
+        return y;
+    }
+    if x == 0.0 {
+        return f64::from_bits(1).copysign(y);
+    }
+    let b = x.to_bits();
+    // away from zero when y is further from zero on x's side
+    f64::from_bits(if (y > x) == (x > 0.0) { b + 1 } else { b - 1 })
+}
+
+/// `math.ulp(x)`: the gap between |x| and the next float away from zero
+pub fn ulp(x: f64) -> f64 {
+    let x = x.abs();
+    if x.is_nan() || x.is_infinite() {
+        return x;
+    }
+    if x == f64::MAX {
+        return x - nextafter(x, f64::NEG_INFINITY);
+    }
+    nextafter(x, f64::INFINITY) - x
+}
+
+/// `math.hypot(x, y)`: CPython's `vector_norm` (scaled, squared exactly with
+/// fused multiply-adds, one differential correction), so the same bits
+pub fn hypot(x: f64, y: f64) -> f64 {
+    let (x, y) = (x.abs(), y.abs());
+    let max = x.max(y);
+    if max.is_infinite() {
+        return max;
+    }
+    if x.is_nan() || y.is_nan() {
+        return f64::NAN;
+    }
+    if max == 0.0 {
+        return max;
+    }
+    vector_norm(&[x, y], max)
+}
+
+fn vector_norm(v: &[f64], max: f64) -> f64 {
+    let max_e = ((max.to_bits() >> 52) & 0x7ff) as i32 - 1022;
+    if max.to_bits() >> 52 == 0 {
+        // subnormal: scale up by DBL_MIN first
+        let w: Vec<f64> = v.iter().map(|x| x / f64::MIN_POSITIVE).collect();
+        return f64::MIN_POSITIVE * vector_norm(&w, max / f64::MIN_POSITIVE);
+    }
+    // 2 ** -max_e (subnormal for max_e > 1022)
+    let k = -max_e;
+    let scale = if k >= -1022 { f64::from_bits(((1023 + k) as u64) << 52) } else { f64::from_bits(1u64 << (k + 1074)) };
+    // csum, frac1, frac2: the exact sum is csum + frac1 + frac2 (lossless, lossy, lossy)
+    let mut s = (1.0f64, 0.0f64, 0.0f64);
+    fn add(s: &mut (f64, f64, f64), hi: f64, lo: f64) {
+        let t = s.0 + hi;
+        let z = t - s.0;
+        s.2 += hi - z;
+        s.0 = t;
+        s.1 += lo;
+    }
+    for &x in v {
+        let x = x * scale;
+        let p = x * x;
+        add(&mut s, p, x.mul_add(x, -p));
+    }
+    let h = (s.0 - 1.0 + (s.1 + s.2)).sqrt();
+    let p = -h * h;
+    add(&mut s, p, (-h).mul_add(h, -p));
+    let x = s.0 - 1.0 + (s.1 + s.2);
+    (h + x / (2.0 * h)) / scale
+}

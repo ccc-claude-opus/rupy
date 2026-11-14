@@ -347,7 +347,20 @@ pub fn repr<T: Py + ?Sized>(x: &T) -> String {
 
 /// Python's shortest round-trip `repr(float)`.
 pub fn float_repr(x: f64) -> String {
-    repr_from(x, &format!("{:e}", x))
+    repr_from(x, &shortest(x))
+}
+
+/// The shortest digits that read back as x, and of those the nearest to x
+/// (ties to even), as CPython's repr: Rust's `{:e}` finds the length, exact
+/// formatting at that length the digits (`{:e}` may give another string of
+/// that length, 1770740270910798.3 for ...798.25).
+fn shortest(x: f64) -> String {
+    let e = format!("{:e}", x);
+    let n = e.split_once('e').map_or(0, |(m, _)| m.chars().filter(|c| c.is_ascii_digit()).count());
+    if n < 2 || !x.is_finite() {
+        return e;
+    }
+    format!("{:.*e}", n - 1, x)
 }
 
 /// `repr` of a NumPy float32 (its own shortest digits, Python's layout).
@@ -491,6 +504,30 @@ pub fn modulo(a: i64, b: i64) -> i64 {
     } else {
         r
     }
+}
+
+/// `a / b` of ints: the exact quotient rounded once, as CPython's (`a as f64`
+/// would round an int beyond 2**53 first)
+pub fn idiv(a: i64, b: i64) -> f64 {
+    if b == 0 {
+        raise("ZeroDivisionError", "division by zero");
+    }
+    idiv_exact(a, b)
+}
+
+pub(crate) fn idiv_exact(a: i64, b: i64) -> f64 {
+    const EXACT: u64 = 1 << 53;
+    let (ua, ub) = (a.unsigned_abs(), b.unsigned_abs());
+    if ua <= EXACT && ub <= EXACT {
+        return a as f64 / b as f64;
+    }
+    // a quotient of 55 or 56 bits with a sticky last bit rounds correctly to f64
+    let bits = |x: u64| 64 - x.leading_zeros() as i32;
+    let k = 55 - (bits(ua) - bits(ub));
+    let (n, d) = if k >= 0 { ((ua as u128) << k, ub as u128) } else { (ua as u128, (ub as u128) << -k) };
+    let q = (n / d) | (n % d != 0) as u128;
+    let x = q as f64 * f64::from_bits(((1023 - k) as u64) << 52);
+    if (a < 0) != (b < 0) { -x } else { x }
 }
 
 /// `a / b` (true division)

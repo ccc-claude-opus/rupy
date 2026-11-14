@@ -64,7 +64,8 @@ rupy fuzz 300                 # 隨機程式與 CPython 比對
 `with open`、generator、使用 `nonlocal` 的巢狀函式、lambda 與 `Callable`；泛型函式、
 `Protocol` 與聯集型別參數（依引數型別分別編譯）；`math`、`collections`、`heapq`、
 `bisect`、`itertools`、`functools`、`random`（同一個 seed 產生和 CPython 一樣的數字）、
-`re`、`sys`、`time`、`json.dumps` / `json.loads`、`os.path`。
+`re`、`sys`、`time`、`json.dumps` / `json.loads`、`os.path`；以及用 rupy 寫成的（`pylib/`）
+`statistics`、`fractions`、`csv`、`io.StringIO`。
 
 一些寫法翻譯後的樣子（更多在 [docs/cases](docs/cases/README.md)）：
 

@@ -66,7 +66,9 @@ each call, `nonlocal` ones by `&mut`), generators (`yield`, `yield from`, `next(
 
 Generic functions are compiled once per combination of argument types (monomorphized):
 type variables (`def f[T](...)` or `T = TypeVar("T")`), `Protocol` parameters, and union
-parameters (`x: int | str`, where `isinstance(x, int)` is decided per instance).
+parameters (`x: int | str`, where `isinstance(x, int)` is decided per instance). A method with union
+parameters (`def __add__(self, other: Fraction | int)`) is compiled once per member, outside
+class hierarchies and `__init__`.
 
 Rejected: `**kwargs`, mutable default values, generator methods, `send()`, an exception
 raised inside a generator that its consumer catches, nested functions that use enclosing
@@ -108,6 +110,16 @@ mixed types is read with `rupy.json.Json`. `math.gamma`, `lgamma`, `erf`, `erfc`
 lgamma are CPython's Lanczos code, fused multiply-adds included; the others call the C
 library as CPython does); on wasm, erf and erfc are FreeBSD's and exp / pow are
 JavaScript's, so the last digit may differ. `math.fsum` is exact on both.
+
+Written in rupy (`pylib/`, compiled with the program on both backends): `statistics`
+(lists of floats; `mean`, `variance`, `stdev`, ... sum exactly as CPython does with fractions,
+here with expansions of floats, so the same floats; `mode` / `multimode` / `median_low` /
+`median_high` of any list; `NormalDist`), `fractions` (`Fraction` of 64-bit ints, with ints;
+`Fraction.from_float` for floats), `csv` (`reader`, `writer`, `DictReader`, `DictWriter` on a
+text file, an `io.StringIO` or a list of lines) and `io.StringIO`. A file is a handle that
+copies share (`csv.writer(f)` keeps it), so a generator cannot take one. `open` takes
+`newline=` (None, `""`, `"\n"`) and reads universal newlines by default. `TextIO` annotates a
+file.
 
 In `re`, lookaround, backreferences, `$` without `re.MULTILINE` and function
 replacements are rejected (the regex crate differs from Python there).

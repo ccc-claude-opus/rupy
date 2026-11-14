@@ -231,6 +231,13 @@ pub fn try_div(a: f64, b: f64) -> PyResult<f64> {
     Ok(a / b)
 }
 
+pub fn try_idiv(a: i64, b: i64) -> PyResult<f64> {
+    if b == 0 {
+        return Err(PyErr::new(ZERO_DIVISION_ERROR, "division by zero"));
+    }
+    Ok(super::idiv_exact(a, b))
+}
+
 pub fn try_ffloordiv(a: f64, b: f64) -> PyResult<f64> {
     if b == 0.0 {
         return Err(PyErr::new(ZERO_DIVISION_ERROR, "division by zero"));

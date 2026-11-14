@@ -355,7 +355,8 @@ fn collect_places<'a>(t: &'a Target, out: &mut Vec<&'a Expr>) {
 
 pub fn immutable_ty(t: &Ty, classes: &[bool]) -> bool {
     match t {
-        Ty::Int | Ty::Float | Ty::Bool | Ty::Str | Ty::None => true,
+        // a file is a shared handle
+        Ty::Int | Ty::Float | Ty::Bool | Ty::Str | Ty::None | Ty::File => true,
         Ty::Tuple(ts) => ts.iter().all(|t| immutable_ty(t, classes)),
         Ty::Class(c) => classes[*c],
         Ty::Optional(t) => matches!(**t, Ty::Class(_)) && immutable_ty(t, classes),

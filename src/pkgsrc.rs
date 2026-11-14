@@ -24,6 +24,10 @@ const BUILTIN: &[(&str, &str, &str)] = &[
     ("rstatistics", "rformat.py", include_str!("../rstatistics/rstatistics/rformat.py")),
     ("rstatistics", "rng.py", include_str!("../rstatistics/rstatistics/rng.py")),
     ("rstatistics", "special.py", include_str!("../rstatistics/rstatistics/special.py")),
+    ("fractions", "__init__.py", include_str!("../pylib/fractions/__init__.py")),
+    ("statistics", "__init__.py", include_str!("../pylib/statistics/__init__.py")),
+    ("io", "__init__.py", include_str!("../pylib/io/__init__.py")),
+    ("csv", "__init__.py", include_str!("../pylib/csv/__init__.py")),
 ];
 
 /// The files of package `name`: `DIR/name/*.py` (with an `__init__.py`) in the
@@ -47,6 +51,16 @@ pub fn package_files(name: &str) -> Option<Vec<(PathBuf, String)>> {
 /// Whether there is a package `name` written in rupy.
 pub fn is_package(name: &str) -> bool {
     BUILTIN.iter().any(|(p, _, _)| *p == name) || package_files(name).is_some()
+}
+
+/// The name Python shows for `name` (a class's `__qualname__`): without
+/// the `PKG__` of a package's names.
+pub fn py_name(name: &str) -> &str {
+    match name.split_once("__") {
+        Some((pkg, rest)) if !pkg.is_empty() && !rest.is_empty() && BUILTIN.iter().any(|(p, _, _)| *p == pkg) => rest,
+        Some((pkg, rest)) if !pkg.is_empty() && !rest.is_empty() && is_package(pkg) => rest,
+        _ => name,
+    }
 }
 
 /// The new name of `name` of package `pkg`.

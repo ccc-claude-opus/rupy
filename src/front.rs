@@ -1473,6 +1473,9 @@ impl Front {
                     };
                     self.p.classes[cid].fields.push(Field { name: n.id.to_string(), ty, default });
                 }
+                AStmt::FunctionDef(f) if self.union_method(f) => {
+                    self.union_method_sig(f, cid)?;
+                }
                 AStmt::FunctionDef(f) => {
                     let fid = self.signature(f, Some(cid))?;
                     let name = f.name.id.as_str();
@@ -1693,6 +1696,8 @@ impl Front {
                 "bool" => Ok(Ty::Bool),
                 "str" => Ok(Ty::Str),
                 "None" => Ok(Ty::None),
+                // a text file (`open`)
+                "TextIO" if !self.classes.contains_key("TextIO") => Ok(Ty::File),
                 w if self.in_stub.is_some() && WIDTHS.contains(&w) => Ok(if w == "f32" { Ty::Float } else { Ty::Int }),
                 "list" | "List" | "dict" | "Dict" | "set" | "Set" | "tuple" | "Tuple" => {
                     err(line, format!("`{}` needs element types, e.g. list[int]", n.id))
@@ -1960,7 +1965,7 @@ impl Front {
                 }
                 match &r.value {
                     None if ret == Ty::None || matches!(ret, Ty::Gen(_)) => StmtKind::Return(None),
-                    Some(_) if matches!(ret, Ty::Gen(_)) => return err(line, "a generator cannot return a value"),
+                    Some(_) if self.p.funcs[self.cur].is_gen => return err(line, "a generator cannot return a value"),
                     None if matches!(ret, Ty::Optional(_)) => {
                         let n = self.mk(line, ret.clone(), ExprKind::NoneVal);
                         StmtKind::Return(Some(n))
@@ -4670,7 +4675,8 @@ impl Front {
                     ("math.log", vec![Ty::Float], Ty::Float)
                 }
             }
-            "atan2" | "hypot" | "pow" | "fmod" | "copysign" => (leak(format!("math.{}", name)), vec![Ty::Float, Ty::Float], Ty::Float),
+            "atan2" | "hypot" | "pow" | "fmod" | "copysign" | "nextafter" => (leak(format!("math.{}", name)), vec![Ty::Float, Ty::Float], Ty::Float),
+            "ulp" => ("math.ulp", vec![Ty::Float], Ty::Float),
             "fma" => ("math.fma", vec![Ty::Float, Ty::Float, Ty::Float], Ty::Float),
             "radians" | "degrees" => (leak(format!("math.{}", name)), vec![Ty::Float], Ty::Float),
             "isclose" => ("math.isclose", vec![Ty::Float, Ty::Float], Ty::Bool),

@@ -47,7 +47,7 @@ pub fn mutating(n: &str) -> bool {
             | "bisect.insort_left" | "bisect.insort_right" | "random.shuffle" | "deque.append"
             | "deque.appendleft" | "deque.pop" | "deque.popleft" | "deque.extend" | "deque.clear"
             | "counter.update"
-    ) || n.starts_with("file.") || n == "gen.next"
+    ) || n == "gen.next"
 }
 
 /// `@functools.cache`: the function is renamed `NAME_uncached` and a wrapper
@@ -245,7 +245,8 @@ impl FGen<'_> {
             }
             ("re", _) => self.re_builtin(f, a, e)?,
             ("file", _) => {
-                let fv = self.ex_mut(&a[0])?;
+                // a handle: its methods take &self
+                let fv = self.ex(&a[0])?;
                 let fc = par(&fv, ATOM);
                 match f {
                     "write" => v(format!("{}.write({})", fc, self.borrow_str(&a[1])?)),

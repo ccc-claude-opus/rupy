@@ -765,7 +765,7 @@ fn gen_class(
         if has_repr {
             out += "        out.push_str(&self.__repr__());\n";
         } else if c.dataclass {
-            out += &format!("        out.push_str(\"{}(\");\n", c.name);
+            out += &format!("        out.push_str(\"{}(\");\n", crate::pkgsrc::py_name(&c.name));
             for (i, f) in c.fields.iter().enumerate() {
                 let sep = if i > 0 { ", " } else { "" };
                 out += &format!("        out.push_str(\"{}{}=\");\n", sep, f.name);
@@ -3499,7 +3499,7 @@ impl<'a> FGen<'a> {
             BitXor => bin("^", BXOR),
             Div | FloorDiv | Mod if !self.nonzero_lit(b) && self.catches(&["ZeroDivisionError"]) => {
                 let f = match (op, int) {
-                    (Div, true) => return Ok(r(self.wrap(format!("pyrt::try_div({} as f64, {} as f64)", par(x, CAST), par(y, CAST))), Kind::Val, ATOM)),
+                    (Div, true) => return Ok(r(self.wrap(format!("pyrt::try_idiv({}, {})", x.code, y.code)), Kind::Val, ATOM)),
                     (Div, false) => "div",
                     (FloorDiv, true) => "floordiv",
                     (FloorDiv, false) => "ffloordiv",
@@ -3508,13 +3508,7 @@ impl<'a> FGen<'a> {
                 };
                 r(self.wrap(format!("pyrt::try_{}({}, {})", f, x.code, y.code)), Kind::Val, ATOM)
             }
-            Div if int => {
-                if self.nonzero_lit(b) {
-                    r(format!("{} as f64 / {}", par(x, CAST), float_lit(match b.kind { ExprKind::Int(v) => v as f64, _ => 1.0 })), Kind::Val, MUL)
-                } else {
-                    r(format!("pyrt::div({} as f64, {} as f64)", par(x, CAST), par(y, CAST)), Kind::Val, ATOM)
-                }
-            }
+            Div if int => r(format!("pyrt::idiv({}, {})", x.code, y.code), Kind::Val, ATOM),
             Div => {
                 if self.nonzero_lit(b) {
                     bin("/", MUL)
@@ -4740,7 +4734,6 @@ impl<'a> FGen<'a> {
             "isinf" => v(m(&vs, "is_infinite")),
             "isfinite" => v(m(&vs, "is_finite")),
             "atan2" => v(format!("{}.atan2({})", recv(&vs[0]), vs[1].code)),
-            "hypot" => v(format!("{}.hypot({})", recv(&vs[0]), vs[1].code)),
             "copysign" => v(format!("{}.copysign({})", recv(&vs[0]), vs[1].code)),
             "log2args" => v(format!("pyrt::math::log_base({}, {})", vs[0].code, vs[1].code)),
             "sqrt" | "log" if self.catches(&["ValueError"]) => v(self.wrap(format!("pyrt::try_{}({})", n, vs[0].code))),

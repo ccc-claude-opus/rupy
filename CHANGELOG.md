@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- `statistics`, `fractions`, `csv` and `io.StringIO`, written in rupy (`pylib/`, built into
+  rupy like rstatistics, so both backends). statistics sums exactly with expansions of floats
+  (Shewchuk) and rounds once, as CPython does with fractions: `mean`, `variance`, `stdev`,
+  `harmonic_mean`, ... give CPython's floats to the last bit; `NormalDist.inv_cdf` uses fused
+  multiply-adds like CPython's C version. csv is CPython's `_csv` state machine and writer.
+- Methods with union parameters (one overload per member), `isinstance` of an object decided
+  statically, a function may return a generator, `TextIO` annotations, `math.nextafter`,
+  `math.ulp`; `math.hypot` is CPython's `vector_norm` on both backends (it was libm's /
+  JavaScript's).
+- A file is a handle that copies share (as in Python), `open(..., newline=...)`, and reading
+  translates `\r\n` / `\r` to `\n` as CPython does.
+- Fixes: int / int beyond 2**53 is rounded once (it was rounded twice); the repr of a float is
+  the nearest of the shortest digits (`1770740270910798.2`, not `.3`); dataclass reprs of a
+  package's classes have no `PKG__` prefix.
+
 - `math.gamma`, `lgamma`, `erf`, `erfc`, `asinh`, `acosh`, `atanh` and `math.fsum`, with
   CPython's errors. gamma and lgamma are CPython's own Lanczos code; Apple's clang fuses
   its `a * b + c` into fused multiply-adds, so rupy does too (`mul_add`; a BigInt

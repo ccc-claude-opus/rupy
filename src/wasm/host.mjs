@@ -374,7 +374,7 @@ const MATH = {
     if (d === 0) throw err("ZeroDivisionError", "division by zero");
     return Math.log(x) / d;
   },
-  hypot: (a, b) => Math.hypot(a, b),
+  hypot: (a, b) => hypot(a, b),
   // a * b + z with one rounding: error-free product (Dekker), two-sum with z
   fma: (x, y, z) => {
     const cl = 134217729;
@@ -410,7 +410,77 @@ const MATH = {
   },
   fsum_add: (x) => fsumAdd(fsum, x),
   fsum_end: () => fsumEnd(fsum),
+  int_truediv: (a, b) => intTruediv(a, b),
+  nextafter: (x, y) => nextAfter(x, y),
+  ulp: (x) => {
+    x = Math.abs(x);
+    if (!Number.isFinite(x)) return x;
+    if (x === Number.MAX_VALUE) return x - nextAfter(x, -Infinity);
+    return nextAfter(x, Infinity) - x;
+  },
 };
+
+// math.hypot as CPython's vector_norm: scaled, squared exactly (fmaExact),
+// one differential correction
+function hypot(x, y) {
+  x = Math.abs(x);
+  y = Math.abs(y);
+  if (x === Infinity || y === Infinity) return Infinity;
+  if (Number.isNaN(x) || Number.isNaN(y)) return NaN;
+  const max = Math.max(x, y);
+  if (max === 0) return max;
+  return vectorNorm([x, y], max);
+}
+
+function vectorNorm(v, max) {
+  const DBL_MIN = 2.2250738585072014e-308;
+  if (max < DBL_MIN) return DBL_MIN * vectorNorm(v.map((x) => x / DBL_MIN), max / DBL_MIN);
+  const bits = new BigUint64Array(new Float64Array([max]).buffer)[0];
+  const maxE = Number((bits >> 52n) & 0x7ffn) - 1022;
+  const scale = 2 ** -maxE;
+  let csum = 1.0, frac1 = 0.0, frac2 = 0.0;
+  const add = (hi, lo) => {
+    const s = csum + hi;
+    const z = s - csum;
+    frac2 += hi - z;
+    csum = s;
+    frac1 += lo;
+  };
+  for (let x of v) {
+    x *= scale;
+    const p = x * x;
+    add(p, fmaExact(x, x, -p));
+  }
+  const h = Math.sqrt(csum - 1.0 + (frac1 + frac2));
+  const p = -h * h;
+  add(p, fmaExact(-h, h, -p));
+  const x = csum - 1.0 + (frac1 + frac2);
+  return (h + x / (2.0 * h)) / scale;
+}
+
+function nextAfter(x, y) {
+  if (Number.isNaN(x) || Number.isNaN(y)) return NaN;
+  if (x === y) return y;
+  if (x === 0) return y > 0 ? 5e-324 : -5e-324;
+  const f = new Float64Array([x]);
+  const b = new BigInt64Array(f.buffer);
+  b[0] += (y > x) === (x > 0) ? 1n : -1n;
+  return f[0];
+}
+
+// a / b of ints beyond 2**53, as CPython: a quotient of 55 or 56 bits with a
+// sticky last bit, rounded once by Number(), then scaled exactly
+function intTruediv(a, b) {
+  const neg = a < 0n !== b < 0n;
+  if (a < 0n) a = -a;
+  if (b < 0n) b = -b;
+  const k = 55 - (a.toString(2).length - b.toString(2).length);
+  const [n, d] = k >= 0 ? [a << BigInt(k), b] : [a, b << BigInt(-k)];
+  let q = n / d;
+  if (n % d !== 0n) q |= 1n;
+  const x = Number(q) * 2 ** -k;
+  return neg ? -x : x;
+}
 
 const floatArg = (msg, x) => err("ValueError", msg + ", got " + floatRepr(x));
 
@@ -1384,6 +1454,8 @@ export async function run(bytes, io = {}) {
       let text = files.get(path);
       if (m === "r" && text === undefined) throw err("FileNotFoundError", `[Errno 2] No such file or directory: '${path}'`);
       if (m === "w") text = "";
+      // universal newlines unless newline="" / "\n" (`:raw`)
+      if (m === "r" && !mode.split(":").includes("raw")) text = text.replace(/\r\n?/g, "\n");
       const f = { path, text: text ?? "", at: 0, write: m !== "r", dirty: m !== "r" };
       open.set(BigInt(nextHandle), f);
       return BigInt(nextHandle++);

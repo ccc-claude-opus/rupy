@@ -503,7 +503,7 @@ impl Front {
 
     /// `open(path, mode="r", encoding="utf-8", errors="strict")`
     pub(super) fn open_call(&mut self, args: &ast::Arguments, line: u32) -> Res<Expr> {
-        let kws = self.kw(args, &["mode", "encoding", "errors"], line)?;
+        let kws = self.kw(args, &["mode", "encoding", "errors", "newline"], line)?;
         self.nargs(args, 1, 2, "open", line)?;
         let p = self.arg(args, 0, &Ty::Str, "path")?;
         let mode = match args.args.get(1).or_else(|| kws.get("mode").copied()) {
@@ -525,6 +525,12 @@ impl Front {
             Some(AExpr::StringLiteral(s)) if s.value.to_str() == "replace" => format!("{}:replace", mode),
             Some(_) => return err(line, "errors= is \"strict\" or \"replace\""),
             None => mode,
+        };
+        // newline="" or "\n": lines are read as they are (default: "\r\n" and "\r" read as "\n")
+        let mode = match kws.get("newline") {
+            None | Some(AExpr::NoneLiteral(_)) => mode,
+            Some(AExpr::StringLiteral(s)) if ["", "\n"].contains(&s.value.to_str()) => format!("{}:raw", mode),
+            Some(_) => return err(line, "newline= is None, \"\" or \"\\n\""),
         };
         let m = self.mk(line, Ty::Str, ExprKind::Str(mode));
         Ok(self.mk(line, Ty::File, ExprKind::Builtin("open", vec![p, m])))

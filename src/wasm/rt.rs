@@ -298,7 +298,19 @@ impl<'a> W<'a> {
         self.rt_fn("int_truediv", |w| {
             params!(w, Val::I64, Val::I64);
             w.zero_div_if(1, Val::I64);
-            w.c().local_get(0).f64_convert_i64_s().local_get(1).f64_convert_i64_s().f64_div();
+            // both within ±2**53: exact as floats, so one rounding
+            const E: i64 = 1 << 53;
+            w.c().local_get(0).i64_const(E).i64_add().i64_const(2 * E).i64_le_u();
+            w.c().local_get(1).i64_const(E).i64_add().i64_const(2 * E).i64_le_u().i32_and();
+            w.c().if_(Block::Empty);
+            w.c().local_get(0).f64_convert_i64_s().local_get(1).f64_convert_i64_s().f64_div().return_();
+            w.c().end();
+            // else the host rounds the exact quotient
+            w.c().local_get(0);
+            w.host_arg(&Ty::Int)?;
+            w.c().local_get(1);
+            w.host_arg(&Ty::Int)?;
+            w.host_call("int_truediv", &Ty::Float)?;
             Ok(vec![Val::F64])
         })
     }

@@ -179,6 +179,8 @@ pub fn analyze(p: &Program) -> Res<Exc> {
             fn shared(p: &Program, t: &Ty) -> bool {
                 match t {
                     Ty::Class(c) | Ty::Obj(c) => p.classes[*c].shared,
+                    // a file is a shared handle too
+                    Ty::File => true,
                     Ty::List(e) | Ty::Set(e) | Ty::Optional(e) | Ty::Deque(e) | Ty::Gen(e) => shared(p, e),
                     Ty::Dict(k, v, _) => shared(p, k) || shared(p, v),
                     Ty::Tuple(ts) => ts.iter().any(|t| shared(p, t)),
@@ -187,7 +189,7 @@ pub fn analyze(p: &Program) -> Res<Exc> {
             }
             let f = &p.funcs[fid];
             if f.params.iter().any(|q| shared(p, &f.vars[q.var].ty)) || shared(p, &f.ret) {
-                return err(f.line, "a generator cannot take or yield @shared objects (its body runs on its own thread)")
+                return err(f.line, "a generator cannot take or yield @shared objects or files (its body runs on its own thread)")
                     .map_err(|e| e.hint("return a list instead"));
             }
         }
