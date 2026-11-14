@@ -30,6 +30,9 @@ const BUILTIN: &[(&str, &str, &str)] = &[
     ("csv", "__init__.py", include_str!("../pylib/csv/__init__.py")),
     ("datetime", "__init__.py", include_str!("../pylib/datetime/__init__.py")),
     ("pathlib", "__init__.py", include_str!("../pylib/pathlib/__init__.py")),
+    ("string", "__init__.py", include_str!("../pylib/string/__init__.py")),
+    ("textwrap", "__init__.py", include_str!("../pylib/textwrap/__init__.py")),
+    ("decimal", "__init__.py", include_str!("../pylib/decimal/__init__.py")),
 ];
 
 /// The files of package `name`: `DIR/name/*.py` (with an `__init__.py`) in the

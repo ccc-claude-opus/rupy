@@ -1,6 +1,6 @@
 # 標準函數庫與外部套件的方針
 
-狀態（2026-11-14）：方針已定。wasm 已支援函數當值與產生器。「待補」表第 1 優先已完成（math 的 8 個函數與 `json.loads`）；第 2 優先完成 `statistics`、`fractions`、`csv`、`io.StringIO`、`datetime`、`pathlib`，只剩 `decimal`（`dataclasses` 已可使用）。
+狀態（2026-11-14）：方針已定。wasm 已支援函數當值與產生器。「待補」表第 1 優先已完成（math 的 8 個函數與 `json.loads`）；第 2 優先全部完成；第 3 優先除了 `argparse` 都完成（`dataclasses` 已可使用）。
 
 ## 決定
 
@@ -14,7 +14,8 @@
 
 - 內建在翻譯器：`math`（含 `gamma`、`lgamma`、`erf`、`erfc`、`fsum`、`asinh`、`acosh`、`atanh`）、`collections`、`heapq`、`bisect`、`itertools`、`functools`、`random`、`re`、`sys`、`time`、`json.dumps`、`json.loads`、`os.path`。
 - stub（`src/lib/`）：`os`、`sys`、`time`、`subprocess`、`shlex`、`fnmatch`、`html`。
-- 用 rupy 寫成（`pylib/`，和 rstatistics 一樣內建在 rupy 裡）：`statistics`、`fractions`、`csv`、`io`（`StringIO`）、`datetime`、`pathlib`。
+- 用 rupy 寫成（`pylib/`，和 rstatistics 一樣內建在 rupy 裡）：`statistics`、`fractions`、`csv`、`io`（`StringIO`）、`datetime`、`pathlib`、`decimal`、`string`、`textwrap`。
+- 在翻譯器裡改寫：`operator`、`copy`、`enum`。
 
 ## 待補的標準函數庫（依優先順序）
 
@@ -24,9 +25,9 @@
 | 1 | ~~`json.loads`~~ | 已完成（2026-11-14），見下方說明 |
 | 2 | ~~`csv`、`io.StringIO`、`fractions`、`statistics`~~ | 已完成（2026-11-14），見下方說明 |
 | 2 | ~~`datetime`、`pathlib`~~ | 已完成（2026-11-14），見下方說明 |
-| 2 | `decimal` | 任意精度的十進位運算與 context，工作量最大，留到最後 |
-| 3 | `string`、`textwrap`、`copy`、`operator`、`argparse` | 常用工具 |
-| 3 | `enum`（`dataclasses` 已可使用） | |
+| 2 | ~~`decimal`~~ | 已完成（2026-11-14），見下方說明 |
+| 3 | ~~`string`、`textwrap`、`copy`、`operator`、`enum`~~ | 已完成（2026-11-14），見下方說明 |
+| 3 | `argparse` | `parse_args()` 回傳的物件屬性是動態的，要從 `add_argument` 推出型別，另外設計 |
 | 4 | `base64`、`hashlib`、`struct`、`urllib.parse`、`uuid` | 編碼與雜湊 |
 | 4 | `glob`、`shutil`、`tempfile` | 檔案系統；wasm 上以 host 提供或不支援 |
 | 5 | `logging`、`sqlite3`、`threading`、`asyncio`、`pickle` | 和靜態型別或 wasm 衝突較大，最後再評估 |
@@ -77,6 +78,16 @@
   - `a + b` 在 `a.__add__` 不收 `b` 時改用 `b.__radd__`（`timedelta + date`）。
   - 套件改名時，類別裡的名字不再遮住方法裡的同名模組名稱（`datetime.date()` 方法與 `date` 類別）。
   - wasm：`time.strftime` 由 JavaScript 主機提供；只從不會執行到的程式碼呼叫的套件函數，不再讓整支程式變成「不支援」。
+
+### decimal 與第 3 優先的做法與限制（2026-11-14）
+
+- `decimal`：照 `_pydecimal` 寫，係數存成數字字串，所以位數不受 64 位元限制。只有預設 context（28 位、ROUND_HALF_EVEN）：rupy 不允許模組層級的可變狀態，`getcontext().prec = ...` 做不到，請用 `quantize`。`Decimal(...)` 只收 str（int 用 `Decimal(str(n))`，float 用 `Decimal.from_float`），因為 `__init__` 還不能用聯集參數。沒有 NaN、Infinity，也沒有 `sqrt`、`ln` 等函數。
+- `string`：常數、`capwords`、`Template`（`substitute` 收 dict，不收關鍵字參數）。
+- `textwrap`：CPython 用來切字的 `wordsep_re` 有 lookbehind，rupy 的 `re` 不支援，所以照它的規則手寫成掃描程式。
+- `operator`：在翻譯前把用法改寫成運算式，例如 `operator.add(a, b)` 變成 `(a + b)`、`itemgetter(1)` 變成 `lambda x: x[1]`。因為是 lambda，要放在已知型別的位置，例如 `key=`、`Callable` 參數、有註記的變數。
+- `copy`：`copy.copy` 就是串列、dict、set 的 `copy()`。`copy.deepcopy` 複製整個值；wasm 上只支援串列、物件和不可變的值。
+- `enum`：`class C(Enum)` 在翻譯前改成 `name`、`value` 兩個欄位的 frozen dataclass（所以可以當 dict 的鍵），並產生查表函數，`C.RED`、`C(1)`、`C["RED"]`、`for c in C`、`len(C)`、`auto()`、別名都和 CPython 一樣。產生的程式接在原始程式後面一起解析。還不能用在 `match` 的 case 裡，也沒有 `IntEnum`、`StrEnum`、`Flag`。
+- `argparse` 還沒做：`args.name` 的型別要從 `add_argument(type=..., default=...)` 推出來，需要另外設計。
 
 每個模組都要：
 

@@ -67,7 +67,8 @@ nested functions with `nonlocal`, lambdas and `Callable`; generic functions, `Pr
 and union parameters (compiled per argument type); `math`, `collections`, `heapq`,
 `bisect`, `itertools`, `functools`, `random` (same numbers as CPython for the same
 seed), `re`, `sys`, `time`, `json.dumps` / `json.loads`, `os.path`; and, written in rupy
-(`pylib/`), `statistics`, `fractions`, `csv`, `io.StringIO`, `datetime` and `pathlib`.
+(`pylib/`), `statistics`, `fractions`, `csv`, `io.StringIO`, `datetime`, `pathlib`, `decimal`, `string` and
+`textwrap`; `operator`, `copy` and `enum` are built into the translator.
 
 How some constructs come out (more in [docs/cases](docs/cases/README.md)):
 

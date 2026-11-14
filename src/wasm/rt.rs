@@ -754,6 +754,53 @@ impl<'a> W<'a> {
 
     // ------------------------------------------------------------ lists
 
+    /// `copy.deepcopy`: a new list (of copies) for each list, a new object for
+    /// each object; immutable values are shared.
+    pub fn rt_deepcopy(&mut self, t: &Ty) -> Res<u32> {
+        let t = t.clone();
+        let v = self.val(&t)?.unwrap_or(Val::I32);
+        self.rt_fn(&format!("deepcopy:{:?}", t), move |w| {
+            w.fx.params = vec![v];
+            match &t {
+                t if crate::own::plain_immutable(t) => {
+                    w.c().local_get(0);
+                }
+                Ty::List(e) => {
+                    let k = w.kind(e)?;
+                    let (newl, app) = (w.rt_list_new(k)?, w.rt_list_append(k)?);
+                    let l = w.t.list[k as usize];
+                    let (out, i) = (w.fx.local(w.lref(k)), w.fx.local(Val::I32));
+                    w.c().local_get(0).struct_get(l, 1).call(newl).local_set(out);
+                    w.c().i32_const(0).local_set(i);
+                    w.c().block(Block::Empty).loop_(Block::Empty);
+                    w.c().local_get(i).local_get(0).struct_get(l, 1).i32_ge_s().br_if(1);
+                    w.c().local_get(out).local_get(0).local_get(i).i64_extend_i32_s();
+                    w.list_get(e)?;
+                    let inner = w.rt_deepcopy(e)?;
+                    w.c().call(inner);
+                    w.c().call(app);
+                    w.c().local_get(i).i32_const(1).i32_add().local_set(i).br(0).end().end();
+                    w.c().local_get(out);
+                }
+                Ty::Class(c) if w.p.classes[*c].subs.is_empty() => {
+                    let ct = w.class_ty[*c];
+                    let fields: Vec<Ty> = w.p.classes[*c].fields.iter().map(|f| f.ty.clone()).collect();
+                    w.c().local_get(0).struct_get(ct, 0);
+                    for (i, ft) in fields.iter().enumerate() {
+                        w.c().local_get(0).struct_get(ct, i as u32 + 1);
+                        if w.val(ft)?.is_some() {
+                            let f = w.rt_deepcopy(ft)?;
+                            w.c().call(f);
+                        }
+                    }
+                    w.c().struct_new(ct);
+                }
+                t => return super::unsupported(format!("copy.deepcopy() of {:?}", t)),
+            }
+            Ok(vec![v])
+        })
+    }
+
     pub fn rt_list_new(&mut self, k: K) -> Res<u32> {
         self.rt_fn(&format!("list_new_{:?}", k), |w| {
             params!(w, Val::I32);

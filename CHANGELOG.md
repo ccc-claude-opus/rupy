@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `decimal`, `string` and `textwrap`, written in rupy (`pylib/`): Decimal after `_pydecimal`
+  with digit-string coefficients in the default context; textwrap's `wordsep_re` written out by
+  hand.
+- `operator` (rewritten into expressions and lambdas before lowering), `copy.copy` /
+  `copy.deepcopy`, and `enum.Enum` (a frozen dataclass, its generated code written after the
+  program); a lambda for an `Optional[Callable]` parameter.
+
 - `datetime` and `pathlib`, written in rupy (`pylib/`). datetime: naive `timedelta`, `date`,
   `time`, `datetime` after CPython's `_pydatetime.py` and C module (timedelta's float arguments
   rounded as `delta_new` does, the C module's error messages), `isoformat` / `fromisoformat`,

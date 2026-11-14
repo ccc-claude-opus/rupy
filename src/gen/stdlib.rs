@@ -239,6 +239,7 @@ impl FGen<'_> {
                 let xs = self.ex_mut(&a[0])?;
                 v(format!("pyrt::stdlib::shuffle({})", self.mut_ref_of(&xs)))
             }
+            ("copy", "deepcopy") => v(format!("{}.clone()", par(&self.ex(&a[0])?, ATOM))),
             ("random", "sample") => {
                 let xs = self.slice_arg(&a[0])?;
                 v(format!("pyrt::stdlib::sample({}, {})", xs, self.val(&a[1])?.code))

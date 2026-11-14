@@ -120,7 +120,15 @@ here with expansions of floats, so the same floats; `mode` / `multimode` / `medi
 `Fraction.from_float` for floats), `csv` (`reader`, `writer`, `DictReader`, `DictWriter` on a
 text file, an `io.StringIO` or a list of lines), `io.StringIO`, `datetime` (naive `timedelta`,
 `date`, `time`, `datetime`, with `strftime` / `strptime` in the C locale; `datetime` is not a
-subclass of `date`) and `pathlib` (`Path` on POSIX; `parents`, `iterdir()`, `glob()` are lists). A file is a handle that
+subclass of `date`) `pathlib` (`Path` on POSIX; `parents`, `iterdir()`, `glob()` are lists), `decimal` (`Decimal` of
+any number of digits in the default context: 28 digits, ROUND_HALF_EVEN; `Decimal(str)`,
+`Decimal.from_float`, `quantize`), `string` (constants, `capwords`, `Template` with a dict) and
+`textwrap` (`wrap`, `fill`, `shorten`, `dedent`, `indent`, `TextWrapper`).
+In the translator: `operator` (its functions become the expressions they stand for:
+`itemgetter(1)` is `lambda x: x[1]`, `operator.add` is `lambda a, b: a + b`), `copy.copy` (the
+`copy()` of a list, dict or set) and `copy.deepcopy` (a new copy of the whole value; on wasm of
+lists, objects and immutable values), and `enum.Enum` (a frozen dataclass of `name` and `value`:
+`C.RED`, `C(1)`, `C["RED"]`, `for c in C`, `len(C)`, `auto()`; not in `match` patterns). A file is a handle that
 copies share (`csv.writer(f)` keeps it), so a generator cannot take one. `open` takes
 `newline=` (None, `""`, `"\n"`) and reads universal newlines by default. `TextIO` annotates a
 file.

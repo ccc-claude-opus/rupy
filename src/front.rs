@@ -14,6 +14,8 @@ mod dunder;
 mod generic;
 mod matching;
 mod nested;
+mod enums;
+mod operator;
 mod re;
 mod stdlib;
 
@@ -120,6 +122,9 @@ pub fn lower_with(src: &str, stub_dirs: &[std::path::PathBuf]) -> Res<Program> {
 
 /// `src` with the local modules it imports appended (`modules::combine`).
 pub fn lower_modules(src: &str, stub_dirs: &[std::path::PathBuf], modules: &[String]) -> Res<Program> {
+    // enums: their generated code is written after the program
+    let expanded = enums::expand(src)?;
+    let src: &str = expanded.as_deref().unwrap_or(src);
     let parsed = match ruff_python_parser::parse_module(src) {
         Ok(p) => p,
         Err(e) => {
@@ -128,7 +133,11 @@ pub fn lower_modules(src: &str, stub_dirs: &[std::path::PathBuf], modules: &[Str
             return err(line, format!("syntax error: {}", e.error));
         }
     };
-    let module = parsed.into_syntax();
+    let mut module = parsed.into_syntax();
+    if expanded.is_some() {
+        enums::rewrite(&mut module, src, &LineIndex::from_source_text(src))?;
+    }
+    operator::desugar(&mut module, src, &LineIndex::from_source_text(src))?;
     let mut f = Front {
         lines: LineIndex::from_source_text(src),
         src: src.to_string(),
@@ -3025,6 +3034,11 @@ impl Front {
                     let mut l = l;
                     l.ty = Ty::Func(ps, r);
                     l
+                }
+                // `pred: Callable[[str], bool] | None`: the lambda, then Some
+                Some(Ty::Optional(f)) if matches!(*f, Ty::Func(..)) => {
+                    let l = self.expr(e, Some(&f))?;
+                    self.mk(line, Ty::Optional(f), ExprKind::SomeOf(Box::new(l)))
                 }
                 _ => return err(line, "a lambda needs a known type here: pass it to a Callable parameter or annotate the variable")
                     .map_err(|e| e.hint("f: Callable[[int], int] = lambda x: x + 1")),

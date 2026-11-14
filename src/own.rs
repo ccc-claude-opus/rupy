@@ -353,6 +353,15 @@ fn collect_places<'a>(t: &'a Target, out: &mut Vec<&'a Expr>) {
     }
 }
 
+/// Values without parts that can be modified (no classes).
+pub fn plain_immutable(t: &Ty) -> bool {
+    match t {
+        Ty::Int | Ty::Float | Ty::Bool | Ty::Str | Ty::None => true,
+        Ty::Tuple(ts) => ts.iter().all(plain_immutable),
+        _ => false,
+    }
+}
+
 pub fn immutable_ty(t: &Ty, classes: &[bool]) -> bool {
     match t {
         // a file is a shared handle

@@ -486,6 +486,11 @@ impl<'a> W<'a> {
                 self.expr(&a[0])?;
                 self.c().call(f);
             }
+            "copy.deepcopy" => {
+                self.expr(&a[0])?;
+                let f = self.rt_deepcopy(&a[0].ty)?;
+                self.c().call(f);
+            }
             "time.time" | "time.perf_counter" | "time.monotonic" | "time.sleep" | "os.path.join" | "os.path.exists" | "os.remove" | "bin" | "hex" | "oct" | "sys.stdin.readline" | "sys.stdin.read" | "sys.argv" => self.host_fn(name, a, e)?,
             n if n.starts_with("collections.") || n.starts_with("counter.") || n.starts_with("deque.") || n.starts_with("heapq.") || n.starts_with("bisect.") => self.collections_fn(n, a, e)?,
             n if n.starts_with("list.") => self.list_method(&n[5..], a, e)?,

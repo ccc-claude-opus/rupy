@@ -241,6 +241,7 @@ const STD: &[&str] = &[
     "open",
     "collections.", "deque.", "counter.", "heapq.", "bisect.", "itertools.", "functools.", "random.", "sys.", "time.",
     "json.",
+    "copy.",
 ];
 
 /// A class that contains itself (through Optional fields) needs a Box.

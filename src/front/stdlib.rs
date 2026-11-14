@@ -7,7 +7,7 @@ use super::*;
 
 /// Modules that `import M` / `from M import x` accept.
 pub const MODULES: &[&str] =
-    &["math", "sys", "collections", "heapq", "bisect", "itertools", "functools", "random", "time", "json", "re", "os"];
+    &["math", "sys", "collections", "heapq", "bisect", "itertools", "functools", "random", "time", "json", "re", "os", "copy"];
 
 /// The value type a `defaultdict` factory produces.
 fn factory_ty(name: &str) -> Option<Ty> {
@@ -398,6 +398,34 @@ impl Front {
                 let x = self.arg(args, 0, &Ty::Int, "limit")?;
                 (Ty::None, name, vec![x])
             }
+            // ------------------------------------------------------ copy
+            "copy.copy" => {
+                n_kw(self, &[])?;
+                self.nargs(args, 1, 1, "copy", line)?;
+                let x = self.expr(&args.args[0], None)?;
+                self.settle(&x.ty);
+                let t = self.norm(&x.ty);
+                let m = match &t {
+                    Ty::List(_) => "list.copy",
+                    Ty::Dict(..) => "dict.copy",
+                    Ty::Set(_) => "set.copy",
+                    t if crate::own::plain_immutable(t) => return Ok(x),
+                    t => return err(line, format!("copy.copy() of {} is not supported", self.tn(t))),
+                };
+                (t, m, vec![x])
+            }
+            "copy.deepcopy" => {
+                n_kw(self, &[])?;
+                self.nargs(args, 1, 1, "deepcopy", line)?;
+                let x = self.expr(&args.args[0], None)?;
+                self.settle(&x.ty);
+                let t = self.norm(&x.ty);
+                if !self.deep_copyable(&t) {
+                    return err(line, format!("copy.deepcopy() of {} is not supported", self.tn(&t)))
+                        .map_err(|e| e.hint("@shared objects, files, functions and generators are shared by Python's deepcopy too, or cannot be copied"));
+                }
+                (t, "copy.deepcopy", vec![x])
+            }
             // ------------------------------------------------------ time
             "time.time" | "time.perf_counter" | "time.monotonic" => {
                 self.nargs(args, 0, 0, q, line)?;
@@ -534,6 +562,21 @@ impl Front {
         };
         let m = self.mk(line, Ty::Str, ExprKind::Str(mode));
         Ok(self.mk(line, Ty::File, ExprKind::Builtin("open", vec![p, m])))
+    }
+
+    /// Values `copy.deepcopy` copies as Python does (a clone of the whole value).
+    fn deep_copyable(&self, t: &Ty) -> bool {
+        match self.norm(t) {
+            Ty::Int | Ty::Float | Ty::Bool | Ty::Str | Ty::None => true,
+            Ty::List(e) | Ty::Set(e) | Ty::Optional(e) | Ty::Deque(e) => self.deep_copyable(&e),
+            Ty::Dict(k, v, _) => self.deep_copyable(&k) && self.deep_copyable(&v),
+            Ty::Tuple(ts) => ts.iter().all(|t| self.deep_copyable(t)),
+            Ty::Class(c) => {
+                let cl = &self.p.classes[c];
+                !cl.shared && cl.ext.is_none() && cl.subs.is_empty() && cl.fields.iter().all(|f| self.deep_copyable(&f.ty))
+            }
+            _ => false,
+        }
     }
 
     fn jsonable(&self, t: &Ty, line: u32) -> Res<()> {
