@@ -80,3 +80,17 @@ for k in range(2):
         print("csv.Error", e)
     except ValueError as e:
         print("ValueError", e)
+
+for k in range(3):
+    try:
+        if k == 0:
+            print(list(csv.reader(['a,"b"c'], strict=True)))
+        elif k == 1:
+            for row in csv.reader(["ok,1", "a\rb"]):
+                print(row)
+        else:
+            rd = csv.reader(['x', '"open'], strict=True)
+            print(next(rd))
+            print(next(rd))
+    except csv.Error as e:
+        print("csv.Error", e)

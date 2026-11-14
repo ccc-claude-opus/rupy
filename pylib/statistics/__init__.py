@@ -671,8 +671,8 @@ class NormalDist:
     def __init__(self, mu: float = 0.0, sigma: float = 1.0) -> None:
         if sigma < 0.0:
             raise StatisticsError("sigma must be non-negative")
-        self._mu: float = mu
-        self._sigma: float = sigma
+        self._mu: float = float(mu)
+        self._sigma: float = float(sigma)
 
     @staticmethod
     def from_samples(data: list[float]) -> NormalDist:

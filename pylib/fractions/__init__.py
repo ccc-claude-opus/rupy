@@ -1,36 +1,46 @@
 """rupy's `fractions`: CPython's `fractions.Fraction`, written in rupy.
 
 Numerators and denominators are 64-bit ints: a result beyond them raises
-OverflowError where CPython's ints would grow. `Fraction(n, d)` takes ints
-(`Fraction.from_float(x)` for a float), and arithmetic mixes fractions with
-ints, not with floats."""
+OverflowError where CPython's ints would grow. `Fraction(x)` takes an int, a
+float, a str or a Fraction, and arithmetic mixes fractions with ints, not with
+floats."""
 
 import math
 
 
 class Fraction:
-    def __init__(self, numerator: int = 0, denominator: int = 1) -> None:
-        if denominator == 0:
-            raise ZeroDivisionError("Fraction(" + str(numerator) + ", 0)")
-        g = math.gcd(numerator, denominator)
-        if denominator < 0:
+    def __init__(self, numerator: int | float | str | Fraction = 0, denominator: int | None = None) -> None:
+        n = 0
+        d = 1
+        if isinstance(numerator, int):
+            n = numerator
+            if denominator is not None:
+                d = denominator
+        elif isinstance(numerator, float):
+            if denominator is not None:
+                raise TypeError("both arguments should be Rational instances")
+            n, d = _float_ratio(numerator)
+        elif isinstance(numerator, str):
+            if denominator is not None:
+                raise TypeError("both arguments should be Rational instances")
+            n, d = _parse(numerator)
+        else:
+            n = numerator._numerator
+            d = numerator._denominator
+            if denominator is not None:
+                d = d * denominator
+        if d == 0:
+            raise ZeroDivisionError("Fraction(" + str(n) + ", 0)")
+        g = math.gcd(n, d)
+        if d < 0:
             g = -g
-        self._numerator: int = numerator // g
-        self._denominator: int = denominator // g
+        self._numerator: int = n // g
+        self._denominator: int = d // g
 
     @staticmethod
     def from_float(f: float) -> Fraction:
-        if math.isinf(f):
-            raise OverflowError("cannot convert Infinity to integer ratio")
-        if math.isnan(f):
-            raise ValueError("cannot convert NaN to integer ratio")
-        # f * 2**k is an integer for the smallest k: f's exact value
-        m = f
-        d = 1
-        while m % 1.0 != 0.0:
-            m *= 2.0
-            d *= 2
-        return Fraction(int(m), d)
+        n, d = _float_ratio(f)
+        return Fraction(n, d)
 
     @property
     def numerator(self) -> int:
@@ -237,3 +247,73 @@ def _div(na: int, da: int, nb: int, db: int) -> Fraction:
         n = -n
         d = -d
     return Fraction(n, d)
+
+
+def _float_ratio(f: float) -> tuple[int, int]:
+    if math.isinf(f):
+        raise OverflowError("cannot convert Infinity to integer ratio")
+    if math.isnan(f):
+        raise ValueError("cannot convert NaN to integer ratio")
+    # f * 2**k is an integer for the smallest k: f's exact value
+    m = f
+    d = 1
+    while m % 1.0 != 0.0:
+        m *= 2.0
+        d *= 2
+    return int(m), d
+
+
+def _digits(s: str) -> bool:
+    """Digits, with single underscores between them."""
+    if s == "" or s[0] == "_" or s[-1] == "_" or "__" in s:
+        return False
+    return s.replace("_", "").isdigit()
+
+
+def _parse(text: str) -> tuple[int, int]:
+    """CPython's _RATIONAL_FORMAT: [sign] num [/ den], or a decimal with an exponent."""
+    bad = "Invalid literal for Fraction: " + repr(text)
+    s = text.strip()
+    neg = s.startswith("-")
+    if s.startswith("-") or s.startswith("+"):
+        s = s[1:]
+    n = 0
+    d = 1
+    slash = s.find("/")
+    if slash >= 0:
+        # spaces may surround the slash
+        num = s[:slash].rstrip()
+        den = s[slash + 1 :].lstrip()
+        if not _digits(num) or not _digits(den):
+            raise ValueError(bad)
+        n = int(num.replace("_", ""))
+        d = int(den.replace("_", ""))
+    else:
+        exp = 0
+        e = s.lower().find("e")
+        if e >= 0:
+            ex = s[e + 1 :]
+            sign = 1
+            if ex.startswith("-") or ex.startswith("+"):
+                sign = -1 if ex[0] == "-" else 1
+                ex = ex[1:]
+            if not _digits(ex):
+                raise ValueError(bad)
+            exp = sign * int(ex.replace("_", ""))
+            s = s[:e]
+        whole = s
+        frac = ""
+        dot = s.find(".")
+        if dot >= 0:
+            whole = s[:dot]
+            frac = s[dot + 1 :]
+        if whole == "" and frac == "" or whole != "" and not _digits(whole) or frac != "" and not _digits(frac):
+            raise ValueError(bad)
+        frac = frac.replace("_", "")
+        n = int((whole.replace("_", "") + frac) if whole + frac != "" else "0")
+        d = 10 ** len(frac)
+        if exp >= 0:
+            n *= 10**exp
+        else:
+            d *= 10 ** (-exp)
+    return (-n if neg else n), d

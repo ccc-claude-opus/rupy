@@ -2,8 +2,8 @@
 ROUND_HALF_EVEN), written in rupy after `_pydecimal`. Coefficients are digit
 strings, so they have any number of digits.
 
-`Decimal(value)` takes a str (`Decimal(str(n))` for an int, `Decimal.from_float(x)`
-for a float); the context cannot be changed (`getcontext().prec = ...`), so use
+`Decimal(value)` takes a str, an int, a float (its exact value) or a
+Decimal; the context cannot be changed (`getcontext().prec = ...`), so use
 `quantize`. NaN and Infinity are not supported."""
 
 ROUND_DOWN = "ROUND_DOWN"
@@ -137,61 +137,28 @@ def _shift(a: str, n: int) -> str:
 
 
 class Decimal:
-    def __init__(self, value: str = "0") -> None:
-        s = value.strip().replace("_", "")
+    def __init__(self, value: str | int | float | Decimal = "0") -> None:
         sign = 0
-        if s.startswith("-"):
-            sign = 1
-            s = s[1:]
-        elif s.startswith("+"):
-            s = s[1:]
-        low = s.lower()
-        if low in ["inf", "infinity", "nan", "snan"]:
-            raise ValueError("rupy's decimal: NaN and Infinity are not supported")
+        coeff = "0"
         exp = 0
-        e = low.find("e")
-        if e >= 0:
-            ex = s[e + 1 :]
-            digits_ok = len(ex) > 0 and (ex[0] in "+-" and len(ex) > 1 and ex[1:].isdigit() or ex.isdigit())
-            if not digits_ok:
-                raise InvalidOperation("[<class 'decimal.ConversionSyntax'>]")
-            exp = int(ex)
-            s = s[:e]
-        intpart = s
-        frac = ""
-        dot = s.find(".")
-        if dot >= 0:
-            intpart = s[:dot]
-            frac = s[dot + 1 :]
-        if intpart + frac == "" or not (intpart == "" or intpart.isdigit()) or not (frac == "" or frac.isdigit()):
-            raise InvalidOperation("[<class 'decimal.ConversionSyntax'>]")
+        if isinstance(value, int):
+            sign = 1 if value < 0 else 0
+            coeff = str(abs(value))
+        elif isinstance(value, float):
+            sign, coeff, exp = _from_float(value)
+        elif isinstance(value, str):
+            sign, coeff, exp = _parse(value)
+        else:
+            sign = value._sign
+            coeff = value._int
+            exp = value._exp
         self._sign: int = sign
-        self._int: str = _strip(intpart + frac)
-        self._exp: int = exp - len(frac)
+        self._int: str = coeff
+        self._exp: int = exp
 
     @staticmethod
     def from_float(f: float) -> Decimal:
-        if f != f or f in [float("inf"), float("-inf")]:
-            raise ValueError("rupy's decimal: NaN and Infinity are not supported")
-        sign = 1 if f < 0.0 or f == 0.0 and str(f).startswith("-") else 0
-        x = abs(f)
-        e = 0
-        while x % 1.0 != 0.0:
-            x *= 2.0
-            e -= 1
-        while x >= 9007199254740992.0:
-            x /= 2.0
-            e += 1
-        coeff = str(int(x))
-        exp = 0
-        if e >= 0:
-            for _ in range(e):
-                coeff = _mul_small(coeff, 2)
-        else:
-            for _ in range(-e):
-                coeff = _mul_small(coeff, 5)
-            exp = e
-        return _dec(sign, coeff, exp)
+        return Decimal(f)
 
     # ----------------------------------------------------------- inspection
 
@@ -531,3 +498,58 @@ def _divmod_dec(a: Decimal, b: Decimal, floor: bool) -> tuple[Decimal, Decimal]:
     if len(q) > _PREC:
         raise InvalidOperation("[<class 'decimal.DivisionImpossible'>]")
     return _dec(sign, q, 0), _fix(_dec(a._sign, r, exp))
+
+
+def _parse(value: str) -> tuple[int, str, int]:
+    s = value.strip().replace("_", "")
+    sign = 0
+    if s.startswith("-"):
+        sign = 1
+        s = s[1:]
+    elif s.startswith("+"):
+        s = s[1:]
+    low = s.lower()
+    if low in ["inf", "infinity", "nan", "snan"]:
+        raise ValueError("rupy's decimal: NaN and Infinity are not supported")
+    exp = 0
+    e = low.find("e")
+    if e >= 0:
+        ex = s[e + 1 :]
+        digits_ok = len(ex) > 0 and (ex[0] in "+-" and len(ex) > 1 and ex[1:].isdigit() or ex.isdigit())
+        if not digits_ok:
+            raise InvalidOperation("[<class 'decimal.ConversionSyntax'>]")
+        exp = int(ex)
+        s = s[:e]
+    intpart = s
+    frac = ""
+    dot = s.find(".")
+    if dot >= 0:
+        intpart = s[:dot]
+        frac = s[dot + 1 :]
+    if intpart + frac == "" or not (intpart == "" or intpart.isdigit()) or not (frac == "" or frac.isdigit()):
+        raise InvalidOperation("[<class 'decimal.ConversionSyntax'>]")
+    return sign, _strip(intpart + frac), exp - len(frac)
+
+
+def _from_float(f: float) -> tuple[int, str, int]:
+    if f != f or f in [float("inf"), float("-inf")]:
+        raise ValueError("rupy's decimal: NaN and Infinity are not supported")
+    sign = 1 if f < 0.0 or f == 0.0 and str(f).startswith("-") else 0
+    x = abs(f)
+    e = 0
+    while x % 1.0 != 0.0:
+        x *= 2.0
+        e -= 1
+    while x >= 9007199254740992.0:
+        x /= 2.0
+        e += 1
+    coeff = str(int(x))
+    exp = 0
+    if e >= 0:
+        for _ in range(e):
+            coeff = _mul_small(coeff, 2)
+    else:
+        for _ in range(-e):
+            coeff = _mul_small(coeff, 5)
+        exp = e
+    return sign, coeff, exp

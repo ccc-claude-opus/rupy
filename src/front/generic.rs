@@ -227,7 +227,7 @@ impl Front {
                 self.type_env = old_env;
                 self.restore(saved);
                 let fid = r?;
-    self.p.funcs[fid].name = format!("{}_{}", name, sfx.join("_"));
+                self.p.funcs[fid].name = format!("{}_{}", name, sfx.join("_"));
                 self.instances.insert(key, fid);
                 self.pending.push((fid, d, env));
                 fid
@@ -248,9 +248,9 @@ impl Front {
     pub(super) fn union_method_sig(&mut self, d: &ast::StmtFunctionDef, cid: ClassId) -> Res<()> {
         let line = self.line(d);
         let name = d.name.id.as_str();
-        if name == "__init__" {
-            return err(line, "union types are not supported in __init__'s parameters")
-                .map_err(|e| e.hint("add a @classmethod for each type"));
+        let init = name == "__init__";
+        if init && self.p.classes[cid].dataclass {
+            return err(line, "a dataclass cannot define __init__");
         }
         if self.p.classes[cid].base.is_some() || !self.p.classes[cid].subs.is_empty() {
             return err(line, "methods with union parameters are not supported in a class hierarchy");
@@ -280,7 +280,12 @@ impl Front {
         // name (`sort` and `==` call `__lt__` / `__eq__` by name); the others
         // get the types in their names (`__add___int`)
         let own = Ty::Class(cid);
-        envs.sort_by_key(|(env, _)| std::cmp::Reverse(env.values().filter(|t| **t == own).count()));
+        // (an __init__'s instances for its own objects come last: they read the
+        // fields the others define)
+        envs.sort_by_key(|(env, _)| {
+            let n = env.values().filter(|t| **t == own).count() as i64;
+            if init { n } else { -n }
+        });
         // a union return type pairs with the one union parameter, member by
         // member (`other: timedelta | int` → `float | timedelta`)
         let unions: Vec<&AExpr> = d.parameters.args.iter().chain(d.parameters.kwonlyargs.iter()).filter_map(|p| p.parameter.annotation.as_deref().filter(|a| is_union(a))).collect();
@@ -305,9 +310,16 @@ impl Front {
             self.type_env = old;
             let fid = r?;
             if first.is_some() {
-                self.p.funcs[fid].name = format!("{}_{}", name, sfx.join("_"));
+                // constructors: `new` (the first), `new_int`, `new_str` ...
+                self.p.funcs[fid].name = if init { format!("new_{}", sfx.join("_")) } else { format!("{}_{}", name, sfx.join("_")) };
             }
-            if name.starts_with("__") {
+            if init {
+                if self.p.funcs[fid].ret != Ty::None {
+                    return err(line, "__init__ must return None");
+                }
+                self.p.funcs[fid].is_init = true;
+            }
+            if name.starts_with("__") && !init {
                 if !dunder::SUPPORTED.contains(&name) {
                     return err(line, format!("special method `{}` is not supported", name));
                 }
@@ -317,6 +329,10 @@ impl Front {
                 None => {
                     first = Some(fid);
                     self.p.classes[cid].methods.push((name.to_string(), fid));
+                    if init {
+                        self.p.funcs[fid].name = "__init__".into();
+                        self.p.classes[cid].init = Some(fid);
+                    }
                 }
                 Some(f0) => {
                     // also a method, for `gen` (`method(name)` finds the first)
@@ -324,7 +340,12 @@ impl Front {
                     self.p.classes[cid].methods.push((name.to_string(), fid));
                 }
             }
-            self.pending.push((fid, leaked, env));
+            if init {
+                // lowered with the class's __init__ (it defines the fields)
+                self.union_inits.push((cid, fid, leaked, env));
+            } else {
+                self.pending.push((fid, leaked, env));
+            }
         }
         Ok(())
     }

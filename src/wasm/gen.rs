@@ -278,6 +278,8 @@ impl<'a> W<'a> {
             self.c().local_get(frl).struct_get(frame, 3 + j as u32).local_set(*l);
         }
         self.c().local_get(fr).struct_get(base, STATE).local_set(resume);
+        // finished unless a `yield` stores its state: an exception ends the generator
+        self.c().local_get(fr).i32_const(-1).struct_set(base, STATE);
         self.fx.code.0.extend(body_code);
         // suspended at a `yield`: save the locals
         for (j, (l, _)) in saved.iter().enumerate() {

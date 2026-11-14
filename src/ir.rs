@@ -469,6 +469,29 @@ pub struct Program {
 }
 
 impl Program {
+    /// The `__init__` that `New(c, args)` calls: with union parameters, the
+    /// instance whose parameter types are the arguments' (the front coerced them).
+    pub fn init_for(&self, c: ClassId, args: &[Expr]) -> Option<FuncId> {
+        let first = self.classes[c].init?;
+        let inits = self.inits(c);
+        if inits.len() <= 1 {
+            return Some(first);
+        }
+        inits
+            .into_iter()
+            .find(|&f| {
+                let func = &self.funcs[f];
+                let ps: Vec<&Ty> = func.params.iter().filter(|q| Some(q.var) != func.self_var).map(|q| &func.vars[q.var].ty).collect();
+                ps.len() == args.len() && ps.iter().zip(args).all(|(t, a)| **t == a.ty)
+            })
+            .or(Some(first))
+    }
+
+    /// Every `__init__` of class c (more than one with union parameters).
+    pub fn inits(&self, c: ClassId) -> Vec<FuncId> {
+        self.classes[c].methods.iter().filter(|(n, f)| n == "__init__" && self.funcs[*f].is_init).map(|(_, f)| *f).collect()
+    }
+
     /// `x` is `a` or a subclass of it.
     pub fn is_sub(&self, x: ClassId, a: ClassId) -> bool {
         let mut c = Some(x);

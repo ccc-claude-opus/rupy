@@ -33,6 +33,7 @@ const BUILTIN: &[(&str, &str, &str)] = &[
     ("string", "__init__.py", include_str!("../pylib/string/__init__.py")),
     ("textwrap", "__init__.py", include_str!("../pylib/textwrap/__init__.py")),
     ("decimal", "__init__.py", include_str!("../pylib/decimal/__init__.py")),
+    ("argparse", "__init__.py", include_str!("../pylib/argparse/__init__.py")),
 ];
 
 /// The files of package `name`: `DIR/name/*.py` (with an `__init__.py`) in the

@@ -14,6 +14,7 @@ mod dunder;
 mod generic;
 mod matching;
 mod nested;
+pub mod argparse;
 mod enums;
 mod operator;
 mod re;
@@ -159,6 +160,7 @@ pub fn lower_modules(src: &str, stub_dirs: &[std::path::PathBuf], modules: &[Str
         templates: HashMap::new(),
         instances: HashMap::new(),
         pending: vec![],
+        union_inits: vec![],
         type_env: HashMap::new(),
         overloads: HashMap::new(),
         python_stub: None,
@@ -177,6 +179,7 @@ pub fn lower_modules(src: &str, stub_dirs: &[std::path::PathBuf], modules: &[Str
     f.local_modules = modules.iter().cloned().collect();
     f.module(&module.body)?;
     f.finish()?;
+    crate::intfloat::check(&f.p)?;
     Ok(f.p)
 }
 
@@ -212,6 +215,8 @@ struct Front {
     templates: HashMap<String, &'static ast::StmtFunctionDef>,
     instances: HashMap<String, FuncId>,
     pending: Vec<generic::Pending>,
+    /// the instances of an `__init__` with union parameters: (class, function, AST, types)
+    union_inits: Vec<(ClassId, FuncId, &'static ast::StmtFunctionDef, HashMap<String, Ty>)>,
     /// type variables (and union parameters, `U:<source>`) of the instance being lowered
     type_env: HashMap<String, Ty>,
     /// a stub function with union parameters: its first instance -> all of them
@@ -736,7 +741,15 @@ impl Front {
                 }
                 self.p.classes[cid].fields = fs;
             }
-            if let Some(init) = self.p.classes[cid].init {
+            let unions: Vec<_> = self.union_inits.iter().filter(|u| u.0 == cid).cloned().collect();
+            if !unions.is_empty() {
+                for (_, fid, ast, env) in unions {
+                    let old = std::mem::replace(&mut self.type_env, env);
+                    let r = self.body(fid, &ast.body);
+                    self.type_env = old;
+                    r?;
+                }
+            } else if let Some(init) = self.p.classes[cid].init {
                 let ast = bodies.iter().find(|(f, _)| *f == init).unwrap().1;
                 self.body(init, &ast.body)?;
             }
@@ -1234,6 +1247,14 @@ impl Front {
                 Some(e) if self.python_stub.is_some() && matches!(&**e, AExpr::EllipsisLiteral(_)) => {
                     Some(self.mk(line, ty.clone(), ExprKind::Builtin("python.missing", vec![])))
                 }
+                // a union parameter's default is for the member of its type
+                // (`x: int | str = 0`: the str instance has no default)
+                Some(e) if p.parameter.annotation.as_deref().is_some_and(generic::is_union_ann) && {
+                    let probe = self.save();
+                    let r = self.expr(e, Some(&ty)).and_then(|x| self.coerce(x, &ty, ""));
+                    self.restore(probe);
+                    r.is_err()
+                } => None,
                 Some(e) => {
                     let ex = self.expr(e, Some(&ty))?;
                     let ex = self.coerce(ex, &ty, "default value")?;
@@ -2770,7 +2791,9 @@ impl Front {
                 ast::Number::Int(i) => match i.as_i64() {
                     Some(v) => {
                         if want.map(|w| self.norm(w)) == Some(Ty::Float) {
-                            self.mk(line, Ty::Float, K::Float(v as f64))
+                            // still an int in CPython (`intfloat` follows it)
+                            let i = self.mk(line, Ty::Int, K::Int(v));
+                            self.mk(line, Ty::Float, K::ToFloat(Box::new(i)))
                         } else {
                             self.mk(line, Ty::Int, K::Int(v))
                         }
@@ -4105,6 +4128,8 @@ impl Front {
 
     fn construct_(&mut self, cid: ClassId, args: &ast::Arguments, line: u32) -> Res<Expr> {
         if let Some(init) = self.p.classes[cid].init {
+            // an __init__ with union parameters: the instance for these arguments
+            let init = self.pick_overload(init, args, false, line)?;
             let a = self.call_args(init, args, false, line)?;
             return Ok(self.mk(line, Ty::Class(cid), ExprKind::New(cid, a)));
         }
@@ -4486,10 +4511,9 @@ impl Front {
                     Ok(e) => return Ok(e),
                     Err(x) => x,
                 };
+                // float(n) is a float in CPython too (`intfloat` stops there)
                 match self.norm(&x.ty) {
-                    Ty::Float => Ok(x),
-                    Ty::Int => self.coerce(x, &Ty::Float, ""),
-                    Ty::Str => b(self, "float", Ty::Float, vec![x]),
+                    Ty::Float | Ty::Int | Ty::Str => b(self, "float", Ty::Float, vec![x]),
                     t => err(line, format!("float() of {} is not supported", self.tn(&t))),
                 }
             }

@@ -53,6 +53,23 @@ pub fn raise(exc: &str, msg: &str) -> ! {
     std::process::exit(1)
 }
 
+/// `raise` in a generator's body: its consumer may catch it (any class of
+/// the chain), else the traceback as `raise`.
+pub fn raise_in_gen(chain: &'static [&'static str], msg: &str) -> ! {
+    if err::catching_now() {
+        std::panic::panic_any(PyErr::new(chain, msg));
+    }
+    raise(chain[0], msg)
+}
+
+/// The same for an exception object with fields.
+pub fn raise_data_in_gen<T: std::any::Any + Send + Sync>(chain: &'static [&'static str], msg: String, data: T) -> ! {
+    if err::catching_now() {
+        std::panic::panic_any(PyErr::with_data(chain, msg, data));
+    }
+    raise(chain[0], &msg)
+}
+
 pub(crate) fn exception_of(msg: &str) -> String {
     let first = msg.split(':').next().unwrap_or("");
     if !first.is_empty()

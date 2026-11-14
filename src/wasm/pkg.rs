@@ -5,7 +5,7 @@
 
 use super::bridge;
 use super::enc::{Block, Heap, Val};
-use super::{unsupported, Fx, Res, H, W};
+use super::{unsupported, Fx, Res, H, K, W};
 use crate::ir::*;
 
 /// The package functions a program may call (importing a package declares
@@ -15,7 +15,7 @@ pub(crate) fn used_package_funcs(p: &Program) -> Vec<bool> {
     fn ex(p: &Program, e: &Expr, found: &mut Vec<FuncId>) {
         match &e.kind {
             ExprKind::Call(f, _) | ExprKind::Method(_, f, _) | ExprKind::SuperInit(f, _) => found.push(*f),
-            ExprKind::New(c, _) => found.extend(p.classes[*c].init),
+            ExprKind::New(c, args) => found.extend(p.init_for(*c, args)),
             ExprKind::Field(o, name) => {
                 if let Ty::Class(c) | Ty::Obj(c) = &o.ty {
                     found.extend(p.classes[*c].method(name).filter(|m| p.funcs[*m].property));
@@ -339,10 +339,42 @@ impl<'a> W<'a> {
     /// its op, if `fid` is one.
     pub fn host_ext(p: &Program, fid: FuncId) -> Option<&'static str> {
         let rust = p.funcs[fid].ext.as_ref().map(|x| x.rust.as_str())?;
-        rust.ends_with("lib::time::strftime").then_some("time.strftime")
+        if rust.ends_with("lib::time::strftime") {
+            Some("time.strftime")
+        } else if rust.ends_with("lib::os::environ_get") {
+            Some("os.environ_get")
+        } else if rust.ends_with("lib::sys::stderr_write") {
+            Some("sys.stderr_write")
+        } else {
+            None
+        }
     }
 
     pub fn bridge_fn(&mut self, fid: FuncId) -> Res<()> {
+        if Self::host_ext(self.p, fid) == Some("os.environ_get") {
+            // (key, default): the host's [value] or [], then the value or the default
+            self.fx = Fx { fid: Some(fid), ..Default::default() };
+            let opt = Ty::Optional(Box::new(Ty::Str));
+            self.fx.params = vec![self.val(&Ty::Str)?.unwrap(), self.val(&opt)?.unwrap()];
+            self.c().local_get(0);
+            self.host_arg(&Ty::Str)?;
+            self.host_call("os.environ_get", &Ty::list(Ty::Str))?;
+            let lt = self.val(&Ty::list(Ty::Str))?.unwrap();
+            let l = self.fx.local(lt);
+            self.c().local_set(l);
+            let ov = self.val(&opt)?.unwrap();
+            let out = self.fx.local(ov);
+            self.c().local_get(1).local_set(out);
+            let lst = self.t.list[K::Ref as usize];
+            self.c().local_get(l).struct_get(lst, 1).i32_eqz().i32_eqz().if_(Block::Empty);
+            self.c().local_get(l).i64_const(0);
+            self.list_get(&Ty::Str)?;
+            self.c().local_set(out).end();
+            self.c().local_get(out);
+            let idx = self.user[fid];
+            self.define(idx, vec![ov]);
+            return Ok(());
+        }
         if let Some(op) = Self::host_ext(self.p, fid) {
             // its str arguments, then the host's str
             let f = &self.p.funcs[fid];
@@ -353,8 +385,9 @@ impl<'a> W<'a> {
                 self.c().local_get(i as u32);
                 self.host_arg(&Ty::Str)?;
             }
-            self.host_call(op, &Ty::Str)?;
-            let results: Vec<Val> = self.val(&Ty::Str)?.into_iter().collect();
+            let ret = self.p.funcs[fid].ret.clone();
+            self.host_call(op, &ret)?;
+            let results: Vec<Val> = self.val(&ret)?.into_iter().collect();
             let idx = self.user[fid];
             self.define(idx, results);
             return Ok(());

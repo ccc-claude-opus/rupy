@@ -1,0 +1,21 @@
+import argparse
+
+parser = argparse.ArgumentParser(prog="demo", description="Count things in files.")
+parser.add_argument("path", help="the file")
+parser.add_argument("extra", nargs="*")
+parser.add_argument("-n", "--count", type=int, default=3, help="how many (default: %(default)s)")
+parser.add_argument("--verbose", "-v", action="count")
+parser.add_argument("--mode", choices=["a", "b"], default="a")
+parser.add_argument("-q", action="store_true")
+parser.add_argument("--ratio", type=float)
+parser.add_argument("--tag", action="append")
+
+args = parser.parse_args(["f.txt", "-n", "5", "-vv", "--mode=b", "x", "y", "--ratio", "0.5", "--tag", "t1", "--tag=t2"])
+print(args)
+print(args.path, args.extra, args.count * 2, args.verbose, args.mode, args.q, args.ratio, args.tag)
+a2 = parser.parse_args(["only.txt"])
+print(a2, a2.count + 1)
+print(parser.format_usage(), end="")
+parser.print_help()
+parser.parse_args(["x", "--count", "q"])
+print("not reached")

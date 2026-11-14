@@ -1,4 +1,4 @@
-# error: would be caught by its caller
+"""int() failing inside a generator that list() runs is caught around list()."""
 from typing import Iterator
 
 

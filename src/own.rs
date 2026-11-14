@@ -837,7 +837,7 @@ impl<'a> Fn<'a> {
             ExprKind::Call(fid, args) | ExprKind::SuperInit(fid, args) => self.call(*fid, None, args, e),
             ExprKind::Method(r, fid, args) => self.call(*fid, Some(r), args, e),
             ExprKind::New(c, args) => {
-                if let Some(init) = self.p.classes[*c].init {
+                if let Some(init) = self.p.init_for(*c, args) {
                     self.call(init, None, args, e);
                 } else {
                     for a in args {

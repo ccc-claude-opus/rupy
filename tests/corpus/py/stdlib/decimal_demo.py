@@ -25,3 +25,4 @@ for k in range(5):
         print("DivisionByZero", e)
     except InvalidOperation as e:
         print("InvalidOperation", e)
+print(D(5), D(-12), D(0.1), D(2.5), D(D("1.50")), D(10**18) * D(10**18), D(3) / D(7))

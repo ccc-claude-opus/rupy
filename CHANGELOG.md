@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- An int that went into a float place (`x: float = 3`, `f(3)` for a float parameter, `[1, 2]`
+  as `list[float]`) and is then printed is rejected: CPython prints `3`, rupy `3.0`. The new
+  `intfloat` pass follows such values per call context; `float(n)` is an explicit float.
+- `__init__` with union parameters: one constructor per member (`new`, `new_str`, ...), picked
+  by the argument types; `Fraction("1/3")`, `Fraction(0.5)`, `Decimal(5)`, `Decimal(0.1)`.
+- An exception raised inside a generator reaches the consumer's `try` (around `for`, `next()`,
+  `list()`, a comprehension) on both backends, and ends the generator; user exceptions are
+  raised with their class chain.
+- `argparse`: the translator types `parse_args()` (a dataclass per parser); the package reads
+  the command line, prints usage and help, and errors with exit code 2, as CPython.
+
 - `decimal`, `string` and `textwrap`, written in rupy (`pylib/`): Decimal after `_pydecimal`
   with digit-string coefficients in the default context; textwrap's `wordsep_re` written out by
   hand.

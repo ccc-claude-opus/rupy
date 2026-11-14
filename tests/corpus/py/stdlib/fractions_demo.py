@@ -82,3 +82,14 @@ try:
 except ValueError as e:
     print("ValueError", e)
 print(float(Fraction(2**62 + 1, 3)), float(Fraction(-(2**61) - 1, 2**60 + 7)))
+
+for text in ["3/4", " -1.5 ", "1e3", "2.5e-3", "+7", "1_000/3", ".5", "5.", "3 / 4", "abc", "3/-4", "1.5/2"]:
+    try:
+        print(repr(text), repr(Fraction(text)))
+    except ValueError as e:
+        print(repr(text), "ValueError", e)
+print(repr(Fraction(0.75)), repr(Fraction(Fraction(1, 2), 3)), repr(Fraction(Fraction(3, 4))), repr(Fraction(-0.1)), Fraction(5, 10) == Fraction("1/2"))
+try:
+    Fraction(1.5, 2)
+except TypeError as e:
+    print("TypeError", e)

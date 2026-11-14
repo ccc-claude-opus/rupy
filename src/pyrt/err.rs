@@ -88,6 +88,10 @@ impl crate::pyrt::Py for PyErr {
 
 /// An exception that reached the top: print it like CPython and exit.
 pub fn uncaught(e: PyErr) -> ! {
+    // inside `catching` (a generator whose consumer catches): the exception itself
+    if catching_now() {
+        std::panic::panic_any(e);
+    }
     crate::pyrt::raise(e.kind(), &e.msg)
 }
 
@@ -121,6 +125,16 @@ pub type PyResult<T> = Result<T, PyErr>;
 
 thread_local! {
     static CATCHING: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// How many `catching` calls are active on this thread.
+pub(crate) fn catching_depth() -> u32 {
+    CATCHING.with(|c| c.get())
+}
+
+/// A generator's thread runs as its consumer: catching as deep.
+pub(crate) fn set_catching(depth: u32) {
+    CATCHING.with(|c| c.set(depth));
 }
 
 pub(crate) fn catching_now() -> bool {

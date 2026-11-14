@@ -367,7 +367,7 @@ impl<'a> W<'a> {
         let ct = self.class_ty[c];
         let fields: Vec<Ty> = cl.fields.iter().map(|f| f.ty.clone()).collect();
         self.c().i32_const(c as i32);
-        match cl.init {
+        match self.p.init_for(c, args) {
             Some(init) => {
                 for t in &fields {
                     let v = self.val(t)?.unwrap_or(Val::I32);

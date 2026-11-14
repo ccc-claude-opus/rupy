@@ -1,6 +1,6 @@
 # 標準函數庫與外部套件的方針
 
-狀態（2026-11-14）：方針已定。wasm 已支援函數當值與產生器。「待補」表第 1 優先已完成（math 的 8 個函數與 `json.loads`）；第 2 優先全部完成；第 3 優先除了 `argparse` 都完成（`dataclasses` 已可使用）。
+狀態（2026-11-14）：方針已定。wasm 已支援函數當值與產生器。「待補」表第 1 優先已完成（math 的 8 個函數與 `json.loads`）；第 2 優先全部完成；第 3 優先全部完成（`dataclasses` 已可使用）。
 
 ## 決定
 
@@ -27,7 +27,7 @@
 | 2 | ~~`datetime`、`pathlib`~~ | 已完成（2026-11-14），見下方說明 |
 | 2 | ~~`decimal`~~ | 已完成（2026-11-14），見下方說明 |
 | 3 | ~~`string`、`textwrap`、`copy`、`operator`、`enum`~~ | 已完成（2026-11-14），見下方說明 |
-| 3 | `argparse` | `parse_args()` 回傳的物件屬性是動態的，要從 `add_argument` 推出型別，另外設計 |
+| 3 | ~~`argparse`~~ | 已完成（2026-11-14），見下方說明 |
 | 4 | `base64`、`hashlib`、`struct`、`urllib.parse`、`uuid` | 編碼與雜湊 |
 | 4 | `glob`、`shutil`、`tempfile` | 檔案系統；wasm 上以 host 提供或不支援 |
 | 5 | `logging`、`sqlite3`、`threading`、`asyncio`、`pickle` | 和靜態型別或 wasm 衝突較大，最後再評估 |
@@ -87,7 +87,13 @@
 - `operator`：在翻譯前把用法改寫成運算式，例如 `operator.add(a, b)` 變成 `(a + b)`、`itemgetter(1)` 變成 `lambda x: x[1]`。因為是 lambda，要放在已知型別的位置，例如 `key=`、`Callable` 參數、有註記的變數。
 - `copy`：`copy.copy` 就是串列、dict、set 的 `copy()`。`copy.deepcopy` 複製整個值；wasm 上只支援串列、物件和不可變的值。
 - `enum`：`class C(Enum)` 在翻譯前改成 `name`、`value` 兩個欄位的 frozen dataclass（所以可以當 dict 的鍵），並產生查表函數，`C.RED`、`C(1)`、`C["RED"]`、`for c in C`、`len(C)`、`auto()`、別名都和 CPython 一樣。產生的程式接在原始程式後面一起解析。還不能用在 `match` 的 case 裡，也沒有 `IntEnum`、`StrEnum`、`Flag`。
-- `argparse` 還沒做：`args.name` 的型別要從 `add_argument(type=..., default=...)` 推出來，需要另外設計。
+- `argparse`：翻譯器把 `parser.add_argument(...)`（參數要是字面值）改成套件的 `_add`，把 `parser.parse_args(...)` 改成一個函數，它把讀到的字串轉成 dataclass：每個引數一個欄位，型別由 `type=`、`action=`、`nargs=`、`default=` 決定，可能沒給時是 `T | None`。usage、help（依 `COLUMNS`，預設 80 欄）和錯誤（exit code 2）都照 CPython 的格式。
+
+### 語言層面的修正（2026-11-14）
+
+- int 放進 float 的位置：CPython 仍是 int（`x: float = 3` 印出 `3`），rupy 印出 `3.0`。新的 `intfloat` 分析追蹤這種值（變數、參數、回傳值、欄位、串列，遇到 float 或 `/` 就不再是 int；函數依呼叫時哪些參數可能是 int 分開分析），印出時才拒絕，並提示寫成 `3.0`。`float(n)` 是明確的 float。
+- `__init__` 可以有聯集參數：每個成員各產生一個建構函數，依引數型別選擇。所以 `Fraction("1/3")`、`Fraction(0.5)`、`Decimal(5)`、`Decimal(0.1)` 都可以用。`Path(另一個 Path)` 還不行（`*args` 加聯集）。
+- 產生器裡丟出的例外，現在可以被呼叫端的 `try` 攔截（`for`、`next()`、`list()`、生成式），產生器隨之結束。Rust 後端：產生器執行緒在每次 `next` 時知道呼叫端是否在攔截，例外送回呼叫端再丟出；wasm 後端：例外本來就沿呼叫堆疊傳回，只是把產生器標成已結束。
 
 每個模組都要：
 

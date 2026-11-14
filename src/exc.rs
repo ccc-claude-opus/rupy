@@ -18,6 +18,8 @@ pub struct Exc {
     pub need: Vec<HashSet<String>>,
     /// returns `Result`
     pub fallible: Vec<bool>,
+    /// what the generators may raise: their consumers' `next` and `for` raise it
+    pub gen_may: HashSet<String>,
 }
 
 /// Base class of an exception class.
@@ -107,6 +109,7 @@ pub fn op_kinds(e: &Expr) -> (Vec<&'static str>, Vec<&'static str>) {
             }
             "random.sample" | "random.randrange" | "random.randint" => (vec![], vec!["ValueError"]),
             "functools.reduce" if a.len() == 2 => (vec![], vec!["TypeError"]),
+            "gen.next" if a.len() == 1 => (vec![], vec!["StopIteration"]),
             _ => (vec![], vec![]),
         },
         _ => (vec![], vec![]),
@@ -115,10 +118,15 @@ pub fn op_kinds(e: &Expr) -> (Vec<&'static str>, Vec<&'static str>) {
 
 pub fn analyze(p: &Program) -> Res<Exc> {
     let n = p.funcs.len();
-    let mut x = Exc { may: vec![HashSet::new(); n], need: vec![HashSet::new(); n], fallible: vec![false; n] };
+    let mut x = Exc { may: vec![HashSet::new(); n], need: vec![HashSet::new(); n], fallible: vec![false; n], gen_may: HashSet::new() };
     // may: bottom up to a fixpoint
     loop {
         let mut changed = false;
+        let gm: HashSet<String> = (0..n).filter(|&g| p.funcs[g].is_gen).flat_map(|g| x.may[g].iter().cloned()).collect();
+        if gm != x.gen_may {
+            x.gen_may = gm;
+            changed = true;
+        }
         for fid in 0..n {
             let f = &p.funcs[fid];
             let mut m = HashSet::new();
@@ -173,7 +181,8 @@ pub fn analyze(p: &Program) -> Res<Exc> {
     }
     for fid in 0..n {
         // extern functions are not generated: their call sites convert the Result
-        x.fallible[fid] = p.funcs[fid].ext.is_none() && x.may[fid].iter().any(|k| caught(p, k, &x.need[fid]));
+        // a generator raises into its consumer's `next` (pyrt::generator), not as a Result
+        x.fallible[fid] = p.funcs[fid].ext.is_none() && !p.funcs[fid].is_gen && x.may[fid].iter().any(|k| caught(p, k, &x.need[fid]));
         if p.funcs[fid].is_gen {
             // a generator runs on its own thread: no @shared (Rc) objects in or out
             fn shared(p: &Program, t: &Ty) -> bool {
@@ -192,10 +201,6 @@ pub fn analyze(p: &Program) -> Res<Exc> {
                 return err(f.line, "a generator cannot take or yield @shared objects or files (its body runs on its own thread)")
                     .map_err(|e| e.hint("return a list instead"));
             }
-        }
-        if x.fallible[fid] && p.funcs[fid].is_gen {
-            return err(p.funcs[fid].line, format!("an exception raised inside generator `{}` would be caught by its caller", p.funcs[fid].name))
-                .map_err(|e| e.hint("catch it inside the generator"));
         }
     }
     // a dispatcher and its implementations agree
@@ -227,14 +232,39 @@ fn expr_may(p: &Program, x: &Exc, e: &Expr, out: &mut HashSet<String>) {
     out.extend(a.iter().chain(b.iter()).map(|s| s.to_string()));
     match &e.kind {
         ExprKind::Call(f, _) | ExprKind::Method(_, f, _) | ExprKind::SuperInit(f, _) => out.extend(x.may[*f].iter().cloned()),
-        ExprKind::New(c, _) => {
-            if let Some(i) = p.classes[*c].init {
+        ExprKind::New(c, args) => {
+            if let Some(i) = p.init_for(*c, args) {
                 out.extend(x.may[i].iter().cloned());
             }
         }
+        // running a generator raises what it raises
+        _ if consumes_gen(e) => out.extend(x.gen_may.iter().cloned()),
         _ => {}
     }
     e.children(&mut |c| expr_may(p, x, c, out));
+}
+
+/// Does `e` run a generator: `next(g)`, or `list(g)`, a comprehension over one?
+pub fn consumes_gen(e: &Expr) -> bool {
+    let over_gen = |it: &Iter| {
+        let mut any = false;
+        it.exprs(&mut |x| any |= matches!(x.ty, Ty::Gen(_)) && !matches!(it, Iter::Gen(_)));
+        any
+    };
+    let is_gen_iter = |a: &Expr| matches!(a.ty, Ty::Gen(_)) || matches!(&a.kind, ExprKind::Iter(it) if over_gen(it));
+    match &e.kind {
+        ExprKind::Builtin("gen.next", _) => true,
+        // list(g), sum(g), sorted(g), ", ".join(g) ...
+        ExprKind::Builtin(_, args) => args.iter().any(is_gen_iter),
+        ExprKind::Iter(it) => over_gen(it),
+        ExprKind::Comp(c) => c.gens.iter().any(|g| over_gen(&g.iter)),
+        _ => false,
+    }
+}
+
+/// Does a `for` statement iterate a generator?
+pub fn for_over_gen(it: &Iter) -> bool {
+    matches!(it, Iter::Over(e) if matches!(e.ty, Ty::Gen(_)))
 }
 
 fn stmt_exprs(s: &Stmt, f: &mut dyn FnMut(&Expr)) {
@@ -284,6 +314,11 @@ fn stmt_kinds(s: &Stmt) -> Vec<String> {
 fn block_may(p: &Program, x: &Exc, s: &[Stmt], out: &mut HashSet<String>) {
     for st in s {
         out.extend(stmt_kinds(st));
+        if let StmtKind::For(_, it, ..) = &st.kind {
+            if for_over_gen(it) {
+                out.extend(x.gen_may.iter().cloned());
+            }
+        }
         stmt_exprs(st, &mut |e| expr_may(p, x, e, out));
         match &st.kind {
             StmtKind::Try(b, hs, e, f) => {
@@ -358,7 +393,7 @@ fn block_need(p: &Program, x: &Exc, s: &[Stmt], ctx: &HashSet<String>, adds: &mu
 fn expr_need(p: &Program, x: &Exc, e: &Expr, ctx: &HashSet<String>, adds: &mut Vec<(FuncId, HashSet<String>)>) {
     let callee = match &e.kind {
         ExprKind::Call(f, _) | ExprKind::Method(_, f, _) | ExprKind::SuperInit(f, _) => Some(*f),
-        ExprKind::New(c, _) => p.classes[*c].init,
+        ExprKind::New(c, args) => p.init_for(*c, args),
         _ => None,
     };
     if let Some(g) = callee {
@@ -423,8 +458,8 @@ fn check_expr(p: &Program, x: &Exc, e: &Expr, ctx: &HashSet<String>, closure: bo
     if let ExprKind::Call(f, _) | ExprKind::Method(_, f, _) = &e.kind {
         fails |= x.fallible[*f];
     }
-    if let ExprKind::New(c, _) = &e.kind {
-        fails |= p.classes[*c].init.map(|i| x.fallible[i]).unwrap_or(false);
+    if let ExprKind::New(c, args) = &e.kind {
+        fails |= p.init_for(*c, args).map(|i| x.fallible[i]).unwrap_or(false);
     }
     if closure && fails {
         return Err(Error::new(e.line, "an exception that a try catches cannot come from inside a comprehension, generator or lambda yet")

@@ -1513,6 +1513,15 @@ export async function run(bytes, io = {}) {
   const based = (n, base, prefix) => (n < 0n ? "-" : "") + prefix + (n < 0n ? -n : n).toString(base);
   Object.assign(ops, {
     "time.time": () => Date.now() / 1000,
+    "sys.stderr_write": (s) => {
+      stderr(s);
+      return BigInt([...s].length);
+    },
+    // os.environ.get(key): [value] or [] (Node's environment; none in a browser)
+    "os.environ_get": (k) => {
+      const env = globalThis.process?.env ?? {};
+      return Object.prototype.hasOwnProperty.call(env, k) ? [String(env[k])] : [];
+    },
     // time.strftime(format) for the local time now, as pyrt's
     "time.strftime": (fmt) => {
       const t = new Date();

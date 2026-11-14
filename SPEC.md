@@ -29,6 +29,12 @@ dataclasses (`float` keys are rejected).
 Every function parameter and return value is annotated; local variables are inferred
 and keep one type. `Any` and `object` are rejected.
 
+An int stored in a float place stays an int in CPython (`x: float = 3` prints `3`), while
+rupy's float prints `3.0`: rupy follows such values (through variables, parameters, returns,
+fields and lists, until a float or `/` meets them) and rejects a program that prints one, or
+shows it with `str`, `repr`, an f-string without a float format or `json.dumps`
+("write 3.0"). `float(n)` makes a float, as in CPython.
+
 ## 2. Statements
 
 Assignment (also tuple unpacking, augmented, annotated), `if` / `elif` / `else`,
@@ -68,12 +74,15 @@ Generic functions are compiled once per combination of argument types (monomorph
 type variables (`def f[T](...)` or `T = TypeVar("T")`), `Protocol` parameters, and union
 parameters (`x: int | str`, where `isinstance(x, int)` is decided per instance). A method with union
 parameters (`def __add__(self, other: Fraction | int)`) is compiled once per member, outside
-class hierarchies and `__init__`; a union return type pairs with the union parameter member by
+class hierarchies; for `__init__` each member gets its own constructor, chosen by the argument
+types (`Fraction(1)`, `Fraction("1/3")`, `Fraction(0.5)`); a union return type pairs with the union parameter member by
 member (`other: timedelta | int` → `float | timedelta`). `a + b` falls back to `b.__radd__` when
 `a.__add__` does not take `b`.
 
-Rejected: `**kwargs`, mutable default values, generator methods, `send()`, an exception
-raised inside a generator that its consumer catches, nested functions that use enclosing
+An exception raised inside a generator reaches the `try` around the `for`, `next()`, `list()`
+... that runs it, and ends the generator.
+
+Rejected: `**kwargs`, mutable default values, generator methods, `send()`, nested functions that use enclosing
 variables passed as values, unions outside parameters.
 
 ## 5. Classes
@@ -123,7 +132,10 @@ text file, an `io.StringIO` or a list of lines), `io.StringIO`, `datetime` (naiv
 subclass of `date`) `pathlib` (`Path` on POSIX; `parents`, `iterdir()`, `glob()` are lists), `decimal` (`Decimal` of
 any number of digits in the default context: 28 digits, ROUND_HALF_EVEN; `Decimal(str)`,
 `Decimal.from_float`, `quantize`), `string` (constants, `capwords`, `Template` with a dict) and
-`textwrap` (`wrap`, `fill`, `shorten`, `dedent`, `indent`, `TextWrapper`).
+`textwrap` (`wrap`, `fill`, `shorten`, `dedent`, `indent`, `TextWrapper`), and `argparse`
+(the translator types `parse_args()`: a dataclass with a field per `add_argument`, typed from
+`type=`, `action=`, `nargs=` and `default=`, `T | None` when it may be missing; usage, help and
+errors as CPython prints them).
 In the translator: `operator` (its functions become the expressions they stand for:
 `itemgetter(1)` is `lambda x: x[1]`, `operator.add` is `lambda a, b: a + b`), `copy.copy` (the
 `copy()` of a list, dict or set) and `copy.deepcopy` (a new copy of the whole value; on wasm of
@@ -185,4 +197,3 @@ same exception classes as CPython.
 - `int` is 64-bit: results beyond it raise `OverflowError` instead of growing.
 - `set` iteration order is insertion order; CPython's is its hash table order
   (TODO.md). Sort sets before printing them.
-- Exceptions raised inside generators cannot be caught by the consumer (rejected).

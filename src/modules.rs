@@ -130,6 +130,15 @@ pub fn combine_in(path: &Path, main: String, files: &dyn Files) -> Result<Combin
     // packages written in rupy: name → the new names of their top-level names
     let mut packages: Vec<(String, std::collections::HashMap<String, String>)> = vec![];
     while let Some((p, text, is_main, in_pkg)) = queue.pop() {
+        // argparse: `parse_args()` becomes a typed dataclass (before the packages are joined)
+        let text = match in_pkg {
+            None => match crate::front::argparse::expand(&text) {
+                Ok(Some(t)) => t,
+                Ok(None) => text,
+                Err((line, msg)) => return Err((p.clone(), text, Error::new(line, msg))),
+            },
+            Some(_) => text,
+        };
         let parsed = match ruff_python_parser::parse_module(&text) {
             Ok(m) => m.into_syntax(),
             // syntax errors are reported by the translator itself

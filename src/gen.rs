@@ -574,15 +574,15 @@ fn all_reachable(p: &Program) -> bool {
         fn ex(p: &Program, e: &Expr, found: &mut Vec<FuncId>) {
             match &e.kind {
                 ExprKind::Call(f, _) | ExprKind::Method(_, f, _) | ExprKind::SuperInit(f, _) => found.push(*f),
-                ExprKind::New(c, _) => found.extend(p.classes[*c].init),
+                ExprKind::New(c, args) => found.extend(p.init_for(*c, args)),
                 _ => {}
             }
             e.children(&mut |c| ex(p, c, found));
         }
         fn st(p: &Program, s: &Stmt, found: &mut Vec<FuncId>) {
             stmt_exprs(s, &mut |e| ex(p, e, found));
-            if let StmtKind::Raise(_, Some(Expr { kind: ExprKind::New(c, _), .. })) = &s.kind {
-                found.extend(p.classes[*c].init);
+            if let StmtKind::Raise(_, Some(Expr { kind: ExprKind::New(c, args), .. })) = &s.kind {
+                found.extend(p.init_for(*c, args));
             }
             s.blocks().iter().for_each(|b| b.iter().for_each(|x| st(p, x, found)));
         }
@@ -1029,7 +1029,8 @@ impl<'a> FGen<'a> {
             p,
             o,
             x,
-            ctx: vec![(x.need[fid].clone(), None)],
+            // a generator's body raises into its consumer's `next` (a panic), not as a Result
+            ctx: vec![(if p.funcs[fid].is_gen { Default::default() } else { x.need[fid].clone() }, None)],
             tries: 0,
             fid,
             f: &p.funcs[fid],
@@ -1109,7 +1110,8 @@ impl<'a> FGen<'a> {
         } else if f.is_init && self.init_tuple {
             "init".to_string()
         } else if f.is_init {
-            "new".to_string()
+            // `new`, or `new_int` ... for an __init__ with union parameters
+            if f.name.starts_with("new_") { f.name.clone() } else { "new".to_string() }
         } else {
             ident(&f.name)
         };
@@ -1970,6 +1972,14 @@ impl<'a> FGen<'a> {
                 self.mark_nonneg(t, it);
                 let pat = self.pat(t, &item)?;
                 let mut b = String::new();
+                // a generator whose exception a try here catches: each item is a Result
+                let kinds: Vec<String> = self.x.gen_may.iter().cloned().collect();
+                let (pat, code) = if exc::for_over_gen(it) && self.catches(&kinds) {
+                    b.push_str(&format!("{}let {} = {};\n", inner2, pat, self.wrap("item_".into())));
+                    ("item_".to_string(), format!("pyrt::generator::catching_iter({})", code))
+                } else {
+                    (pat, code)
+                };
                 self.rebind_loop_vars(t, &inner2, &mut b);
                 self.loop_labels.push(label.clone());
                 self.loop_enter();
@@ -2832,7 +2842,11 @@ impl<'a> FGen<'a> {
     fn ex(&mut self, e: &Expr) -> Res<R> {
         // an operation without a try_ variant whose exception is caught here:
         // inside `catching` everything raises plainly and is caught there
-        let bad = exc::op_kinds(e).1;
+        let mut bad: Vec<String> = exc::op_kinds(e).1.iter().map(|k| k.to_string()).collect();
+        // running a generator (`next(g)`, `list(g)`, a comprehension over one) raises what it raises
+        if exc::consumes_gen(e) {
+            bad.extend(self.x.gen_may.iter().cloned());
+        }
         if !bad.is_empty() && self.catches(&bad) {
             self.in_catching += 1;
             let x = self.ex0(e);
@@ -2982,9 +2996,10 @@ impl<'a> FGen<'a> {
             K::New(c, args) => {
                 let cl = &self.p.classes[*c];
                 let sname = struct_name(self.p, *c);
-                if let Some(init) = cl.init {
+                if let Some(init) = self.p.init_for(*c, args) {
                     let a = self.args(init, args)?;
-                    r(self.call_result(init, format!("{}::new({})", sname, a)), Kind::Val, ATOM)
+                    let n = if self.p.funcs[init].name.starts_with("new_") { self.p.funcs[init].name.clone() } else { "new".into() };
+                    r(self.call_result(init, format!("{}::{}({})", sname, n, a)), Kind::Val, ATOM)
                 } else {
                     let mut fs = vec![];
                     for (fd, a) in cl.fields.iter().zip(args.iter()) {
@@ -3287,6 +3302,12 @@ impl<'a> FGen<'a> {
                 let p = self.propagate(&format!("PyErr::with_data({}, exc.msg_.clone(), exc)", exc_const(kind)));
                 return Ok(format!("{{\n    let exc = {};\n    {}\n}}", o, p));
             }
+            // with its class chain: a generator's consumer may catch it as a base class
+            if self.f.is_gen || !crate::front::EXCEPTIONS.contains(&kind) {
+                PYERR.with(|c| c.set(true));
+                EXC_USED.with(|c| c.borrow_mut().insert(kind.to_string()));
+                return Ok(format!("{{\n    let exc = {};\n    pyrt::raise_data_in_gen({}, exc.msg_.clone(), exc)\n}}", o, exc_const(kind)));
+            }
             return Ok(format!("pyrt::raise({}, &{}.msg_)", rust_str(kind), o));
         }
         let m = match msg {
@@ -3297,6 +3318,12 @@ impl<'a> FGen<'a> {
             PYERR.with(|c| c.set(true));
             EXC_USED.with(|c| c.borrow_mut().insert(kind.to_string()));
             return Ok(self.propagate(&format!("PyErr::new({}, {})", exc_const(kind), m)));
+        }
+        if self.f.is_gen || !crate::front::EXCEPTIONS.contains(&kind) {
+            // with its class chain: a generator's consumer may catch it
+            PYERR.with(|c| c.set(true));
+            EXC_USED.with(|c| c.borrow_mut().insert(kind.to_string()));
+            return Ok(format!("pyrt::raise_in_gen({}, {})", exc_const(kind), m));
         }
         Ok(format!("pyrt::raise({}, {})", rust_str(kind), m))
     }
@@ -4554,6 +4581,14 @@ impl<'a> FGen<'a> {
                     r(format!("{} as i64", par(&x, CAST)), Kind::Val, CAST)
                 }
             },
+            "float" if a[0].ty == Ty::Int => {
+                let x = self.val(&a[0])?;
+                v(format!("({} as f64)", par(&x, CAST)))
+            }
+            "float" if a[0].ty == Ty::Float => {
+                let x = self.val(&a[0])?;
+                v(x.code)
+            }
             "float" => {
                 let s = self.borrow_str(&a[0])?;
                 v(self.may_fail("ValueError", "float_str", s))
@@ -4661,6 +4696,7 @@ impl<'a> FGen<'a> {
             }
             "gen.next" => {
                 let g = self.ex_mut(&a[0])?;
+                // (a try here that catches what it raises: `ex` wraps it in `catching`)
                 match a.get(1) {
                     Some(d) => {
                         let dv = self.owned(d)?;
