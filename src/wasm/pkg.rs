@@ -12,42 +12,44 @@ use crate::ir::*;
 /// all of its functions; the others get no bridge code). Special methods are
 /// called by printing, comparing and the like, so they count as used.
 pub(crate) fn used_package_funcs(p: &Program) -> Vec<bool> {
+    fn ex(p: &Program, e: &Expr, found: &mut Vec<FuncId>) {
+        match &e.kind {
+            ExprKind::Call(f, _) | ExprKind::Method(_, f, _) | ExprKind::SuperInit(f, _) => found.push(*f),
+            ExprKind::New(c, _) => found.extend(p.classes[*c].init),
+            ExprKind::Field(o, name) => {
+                if let Ty::Class(c) | Ty::Obj(c) = &o.ty {
+                    found.extend(p.classes[*c].method(name).filter(|m| p.funcs[*m].property));
+                }
+            }
+            _ => {}
+        }
+        e.children(&mut |c| ex(p, c, found));
+    }
+    fn st(p: &Program, s: &Stmt, found: &mut Vec<FuncId>) {
+        crate::gen::stmt_exprs(s, &mut |e| ex(p, e, found));
+        s.blocks().iter().for_each(|b| b.iter().for_each(|x| st(p, x, found)));
+    }
+    // reachable from the program's code: main, the special methods (called
+    // implicitly) and the constants; a package method never called needs nothing
     let mut seen = vec![false; p.funcs.len()];
-    let mut work = vec![];
+    let mut work: Vec<FuncId> = vec![];
+    for c in &p.consts {
+        ex(p, &c.value, &mut work);
+    }
     for (i, f) in p.funcs.iter().enumerate() {
-        let dunder = f.ext.is_some() && f.name.starts_with("__") && f.name.ends_with("__") && !f.is_init;
-        if f.ext.is_none() || dunder {
-            seen[i] = true;
+        if i == p.main || f.name.starts_with("__") && f.name.ends_with("__") && !f.is_init {
             work.push(i);
         }
     }
     while let Some(f) = work.pop() {
+        if seen[f] {
+            continue;
+        }
+        seen[f] = true;
         let mut found = vec![];
-        fn ex(p: &Program, e: &Expr, found: &mut Vec<FuncId>) {
-            match &e.kind {
-                ExprKind::Call(f, _) | ExprKind::Method(_, f, _) | ExprKind::SuperInit(f, _) => found.push(*f),
-                ExprKind::New(c, _) => found.extend(p.classes[*c].init),
-                ExprKind::Field(o, name) => {
-                    if let Ty::Class(c) | Ty::Obj(c) = &o.ty {
-                        found.extend(p.classes[*c].method(name).filter(|m| p.funcs[*m].property));
-                    }
-                }
-                _ => {}
-            }
-            e.children(&mut |c| ex(p, c, found));
-        }
-        fn st(p: &Program, s: &Stmt, found: &mut Vec<FuncId>) {
-            crate::gen::stmt_exprs(s, &mut |e| ex(p, e, found));
-            s.blocks().iter().for_each(|b| b.iter().for_each(|x| st(p, x, found)));
-        }
         p.funcs[f].body.iter().for_each(|s| st(p, s, &mut found));
         found.extend(p.funcs[f].dispatch.iter().map(|(_, x)| *x));
-        for g in found {
-            if !seen[g] {
-                seen[g] = true;
-                work.push(g);
-            }
-        }
+        work.extend(found.into_iter().filter(|g| !seen[*g]));
     }
     seen
 }
@@ -333,7 +335,30 @@ impl<'a> W<'a> {
     }
 
     /// The function of package function `fid`: its arguments to the host, its result back.
+    /// A package function the JavaScript host implements (`time.strftime`):
+    /// its op, if `fid` is one.
+    pub fn host_ext(p: &Program, fid: FuncId) -> Option<&'static str> {
+        let rust = p.funcs[fid].ext.as_ref().map(|x| x.rust.as_str())?;
+        rust.ends_with("lib::time::strftime").then_some("time.strftime")
+    }
+
     pub fn bridge_fn(&mut self, fid: FuncId) -> Res<()> {
+        if let Some(op) = Self::host_ext(self.p, fid) {
+            // its str arguments, then the host's str
+            let f = &self.p.funcs[fid];
+            let n = f.params.len();
+            self.fx = Fx { fid: Some(fid), ..Default::default() };
+            self.fx.params = vec![self.val(&Ty::Str)?.unwrap(); n];
+            for i in 0..n {
+                self.c().local_get(i as u32);
+                self.host_arg(&Ty::Str)?;
+            }
+            self.host_call(op, &Ty::Str)?;
+            let results: Vec<Val> = self.val(&Ty::Str)?.into_iter().collect();
+            let idx = self.user[fid];
+            self.define(idx, results);
+            return Ok(());
+        }
         let f = &self.p.funcs[fid];
         let key = bridge::key(self.p, fid);
         self.fx = Fx { fid: Some(fid), ..Default::default() };

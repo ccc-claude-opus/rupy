@@ -1513,6 +1513,22 @@ export async function run(bytes, io = {}) {
   const based = (n, base, prefix) => (n < 0n ? "-" : "") + prefix + (n < 0n ? -n : n).toString(base);
   Object.assign(ops, {
     "time.time": () => Date.now() / 1000,
+    // time.strftime(format) for the local time now, as pyrt's
+    "time.strftime": (fmt) => {
+      const t = new Date();
+      const [y, mo, d, h, mi, s] = [t.getFullYear(), t.getMonth() + 1, t.getDate(), t.getHours(), t.getMinutes(), t.getSeconds()];
+      const wd = (t.getDay() + 6) % 7;
+      const yd = Math.round((Date.UTC(y, mo - 1, d) - Date.UTC(y, 0, 1)) / 86400000) + 1;
+      const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+      const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+      const p = (n, w = 2) => String(n).padStart(w, "0");
+      const f = {
+        Y: String(y), y: p(y % 100), m: p(mo), d: p(d), H: p(h), I: p(h % 12 === 0 ? 12 : h % 12), M: p(mi), S: p(s),
+        p: h < 12 ? "AM" : "PM", j: p(yd, 3), A: DAYS[wd], a: DAYS[wd].slice(0, 3), B: MONTHS[mo - 1],
+        b: MONTHS[mo - 1].slice(0, 3), F: `${y}-${p(mo)}-${p(d)}`, T: `${p(h)}:${p(mi)}:${p(s)}`, "%": "%",
+      };
+      return fmt.replace(/%(.?)/gsu, (all, c) => (c === "" ? "%" : f[c] ?? all));
+    },
     "time.perf_counter": () => performance.now() / 1000,
     "time.monotonic": () => performance.now() / 1000,
     "time.sleep": (s) => {

@@ -28,6 +28,8 @@ const BUILTIN: &[(&str, &str, &str)] = &[
     ("statistics", "__init__.py", include_str!("../pylib/statistics/__init__.py")),
     ("io", "__init__.py", include_str!("../pylib/io/__init__.py")),
     ("csv", "__init__.py", include_str!("../pylib/csv/__init__.py")),
+    ("datetime", "__init__.py", include_str!("../pylib/datetime/__init__.py")),
+    ("pathlib", "__init__.py", include_str!("../pylib/pathlib/__init__.py")),
 ];
 
 /// The files of package `name`: `DIR/name/*.py` (with an `__init__.py`) in the
@@ -43,6 +45,11 @@ pub fn package_files(name: &str) -> Option<Vec<(PathBuf, String)>> {
             return files.into_iter().map(|f| std::fs::read_to_string(&f).ok().map(|t| (f, t))).collect();
         }
     }
+    // a stub `name.pyi` of the program's (a `# python:` bridge to CPython's module)
+    // comes before rupy's own copy
+    if crate::front::package_dirs().iter().any(|d| d.join(format!("{}.pyi", name)).is_file()) {
+        return None;
+    }
     let files: Vec<(PathBuf, String)> =
         BUILTIN.iter().filter(|(p, _, _)| *p == name).map(|(p, f, t)| (PathBuf::from(format!("{}/{}", p, f)), t.to_string())).collect();
     (!files.is_empty()).then_some(files)
@@ -50,7 +57,7 @@ pub fn package_files(name: &str) -> Option<Vec<(PathBuf, String)>> {
 
 /// Whether there is a package `name` written in rupy.
 pub fn is_package(name: &str) -> bool {
-    BUILTIN.iter().any(|(p, _, _)| *p == name) || package_files(name).is_some()
+    package_files(name).is_some()
 }
 
 /// The name Python shows for `name` (a class's `__qualname__`): without
@@ -126,7 +133,7 @@ pub fn top_names(body: &[Stmt]) -> Vec<String> {
 /// Rewrite `text` (parsed as `body`): the names in `map` (where they are not
 /// shadowed) and the attributes `A.x` of the aliases (`A` → package prefix).
 pub fn rewrite(text: &str, body: &[Stmt], map: &HashMap<String, String>, aliases: &HashMap<String, String>) -> String {
-    let mut r = Renamer { map, aliases, scopes: vec![], edits: vec![], in_annotation: false };
+    let mut r = Renamer { map, aliases, scopes: vec![], classes: vec![], edits: vec![], in_annotation: false };
     r.visit_body(body);
     let mut edits = r.edits;
     edits.sort_by_key(|(range, _)| std::cmp::Reverse(range.start()));
@@ -150,13 +157,20 @@ struct Renamer<'m> {
     aliases: &'m HashMap<String, String>,
     /// local names of the enclosing functions, classes and comprehensions
     scopes: Vec<HashSet<String>>,
+    /// the indices in `scopes` of class bodies: their names are attributes,
+    /// seen by the class body only (not its methods, nor annotations here)
+    classes: Vec<usize>,
     edits: Vec<(TextRange, String)>,
     in_annotation: bool,
 }
 
 impl Renamer<'_> {
     fn local(&self, name: &str) -> bool {
-        self.scopes.iter().any(|s| s.contains(name))
+        let n = self.scopes.len();
+        self.scopes.iter().enumerate().any(|(i, s)| {
+            let class = self.classes.contains(&i);
+            s.contains(name) && !(class && (i + 1 < n || self.in_annotation))
+        })
     }
     fn rename(&mut self, name: &str, range: TextRange) {
         if !self.local(name) {
@@ -266,9 +280,11 @@ impl<'a> Visitor<'a> for Renamer<'_> {
                     self.visit_arguments(args);
                 }
                 // the class body's names are attributes, not the module's
+                self.classes.push(self.scopes.len());
                 self.scopes.push(binds(&c.body, None));
                 self.visit_body(&c.body);
                 self.scopes.pop();
+                self.classes.pop();
             }
             _ => visitor::walk_stmt(self, s),
         }

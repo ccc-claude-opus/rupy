@@ -95,7 +95,7 @@ pub fn compile(p: &Program) -> Res<Vec<u8>> {
     }
     // a package function rupy_lib.wasm does not have (`os.listdir`, ...)
     let used = pkg::used_package_funcs(p);
-    if let Some(f) = (0..p.funcs.len()).find(|&f| used[f] && p.funcs[f].ext.is_some() && !bridge::lib_keys().contains(&bridge::key(p, f))) {
+    if let Some(f) = (0..p.funcs.len()).find(|&f| used[f] && p.funcs[f].ext.is_some() && W::host_ext(p, f).is_none() && !bridge::lib_keys().contains(&bridge::key(p, f))) {
         return unsupported(format!("`{}` (a package function rupy_lib.wasm does not have)", p.funcs[f].name));
     }
     let mut w = W::new(p);
@@ -476,11 +476,24 @@ impl<'a> W<'a> {
                 if used[fid] {
                     self.bridge_fn(fid)?;
                 } else {
-                    // never called: no bridge code
-                    self.fx = Fx::default();
+                    // never called (only from code never run): no bridge code, but its type
+                    self.fx = Fx { fid: Some(fid), ..Default::default() };
+                    // as `bridge_fn` has them: self, then the others
+                    let mut params = vec![];
+                    if let (false, Some(sv)) = (f.is_init, f.self_var) {
+                        params.extend(self.val(&f.vars[sv].ty)?);
+                    }
+                    for q in f.params.iter().filter(|q| Some(q.var) != f.self_var) {
+                        if let Some(v) = self.val(&f.vars[q.var].ty)? {
+                            params.push(v);
+                        }
+                    }
+                    let ret = if f.is_init { Ty::Class(f.class.unwrap()) } else { f.ret.clone() };
+                    let results: Vec<Val> = self.val(&ret)?.into_iter().collect();
+                    self.fx.params = params;
                     self.c().unreachable();
                     let idx = self.user[fid];
-                    self.define(idx, vec![]);
+                    self.define(idx, results);
                 }
                 continue;
             }

@@ -281,6 +281,23 @@ impl Front {
         // get the types in their names (`__add___int`)
         let own = Ty::Class(cid);
         envs.sort_by_key(|(env, _)| std::cmp::Reverse(env.values().filter(|t| **t == own).count()));
+        // a union return type pairs with the one union parameter, member by
+        // member (`other: timedelta | int` → `float | timedelta`)
+        let unions: Vec<&AExpr> = d.parameters.args.iter().chain(d.parameters.kwonlyargs.iter()).filter_map(|p| p.parameter.annotation.as_deref().filter(|a| is_union(a))).collect();
+        if let Some(r) = d.returns.as_deref().filter(|r| is_union(r)) {
+            let (rs, ps) = (members(r), unions.first().map(|u| members(u)).unwrap_or_default());
+            if unions.len() != 1 || rs.len() != ps.len() {
+                return err(line, "a union return type needs one union parameter with as many members");
+            }
+            let pkey = format!("U:{}", self.src[unions[0].range()].trim());
+            let rkey = format!("U:{}", self.src[r.range()].trim());
+            let pts: Vec<Ty> = ps.iter().map(|m| self.ann(m)).collect::<Res<_>>()?;
+            let rts: Vec<Ty> = rs.iter().map(|m| self.ann(m)).collect::<Res<_>>()?;
+            for (env, _) in envs.iter_mut() {
+                let i = pts.iter().position(|t| Some(t) == env.get(&pkey)).unwrap();
+                env.insert(rkey.clone(), rts[i].clone());
+            }
+        }
         let mut first = None;
         for (env, sfx) in envs {
             let old = std::mem::replace(&mut self.type_env, env.clone());

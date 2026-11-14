@@ -160,11 +160,28 @@ impl Front {
         fid
     }
 
+    /// Does a one-argument special method (or one of its overloads) take `a`?
+    fn dunder_fits(&mut self, fid: FuncId, a: &Expr) -> bool {
+        let cands = self.overloads.get(&fid).cloned().unwrap_or_else(|| vec![fid]);
+        cands.into_iter().any(|c| {
+            let f = &self.p.funcs[c];
+            f.params.len() == 1 && {
+                let t = f.vars[f.params[0].var].ty.clone();
+                self.norm(&t) == self.norm(&a.ty) || self.coerce(a.clone(), &t, "").is_ok()
+            }
+        })
+    }
+
     /// `l op r` on objects: `l.__op__(r)` or `r.__rop__(l)`.
     pub(super) fn binary_dunder(&mut self, op: BinOp, l: Expr, r: Expr, line: u32) -> Res<Result<Expr, (Expr, Expr)>> {
         let (m, rm) = names(op);
         if let Some(f) = self.find_method(&l.ty, m) {
-            return self.call_dunder(l, f, vec![r], line).map(Ok);
+            // `td + d`: timedelta's __add__ does not take a date, date's __radd__ does
+            let fallback = self.find_method(&r.ty, rm).filter(|_| !self.dunder_fits(f, &r));
+            match fallback {
+                Some(g) => return self.call_dunder(r, g, vec![l], line).map(Ok),
+                None => return self.call_dunder(l, f, vec![r], line).map(Ok),
+            }
         }
         if let Some(f) = self.find_method(&r.ty, rm) {
             return self.call_dunder(r, f, vec![l], line).map(Ok);

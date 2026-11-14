@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- `datetime` and `pathlib`, written in rupy (`pylib/`). datetime: naive `timedelta`, `date`,
+  `time`, `datetime` after CPython's `_pydatetime.py` and C module (timedelta's float arguments
+  rounded as `delta_new` does, the C module's error messages), `isoformat` / `fromisoformat`,
+  `strftime` and `strptime` (the regex's alternatives in order) in the C locale. pathlib: `Path`
+  on POSIX, pure operations and files.
+- A union return type of a method pairs with its union parameter; `a + b` uses `b.__radd__`
+  when `a.__add__` does not take `b`; a class's names are not seen by its methods when a
+  package is renamed; wasm: `time.strftime` from the host, and a package function only reached
+  from code never run no longer makes a program unsupported.
+- A program's `# python:` stub (`rupylib/datetime.pyi`) comes before rupy's own package of that name.
+
 - `statistics`, `fractions`, `csv` and `io.StringIO`, written in rupy (`pylib/`, built into
   rupy like rstatistics, so both backends). statistics sums exactly with expansions of floats
   (Shewchuk) and rounds once, as CPython does with fractions: `mean`, `variance`, `stdev`,

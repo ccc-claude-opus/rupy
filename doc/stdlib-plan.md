@@ -1,6 +1,6 @@
 # 標準函數庫與外部套件的方針
 
-狀態（2026-11-14）：方針已定。wasm 已支援函數當值與產生器。「待補」表第 1 優先已完成（math 的 8 個函數與 `json.loads`）；第 2 優先完成 `statistics`、`fractions`、`csv`、`io.StringIO`，`datetime`、`pathlib`、`decimal` 還沒做（`dataclasses` 已可使用）。
+狀態（2026-11-14）：方針已定。wasm 已支援函數當值與產生器。「待補」表第 1 優先已完成（math 的 8 個函數與 `json.loads`）；第 2 優先完成 `statistics`、`fractions`、`csv`、`io.StringIO`、`datetime`、`pathlib`，只剩 `decimal`（`dataclasses` 已可使用）。
 
 ## 決定
 
@@ -14,7 +14,7 @@
 
 - 內建在翻譯器：`math`（含 `gamma`、`lgamma`、`erf`、`erfc`、`fsum`、`asinh`、`acosh`、`atanh`）、`collections`、`heapq`、`bisect`、`itertools`、`functools`、`random`、`re`、`sys`、`time`、`json.dumps`、`json.loads`、`os.path`。
 - stub（`src/lib/`）：`os`、`sys`、`time`、`subprocess`、`shlex`、`fnmatch`、`html`。
-- 用 rupy 寫成（`pylib/`，和 rstatistics 一樣內建在 rupy 裡）：`statistics`、`fractions`、`csv`、`io`（`StringIO`）。
+- 用 rupy 寫成（`pylib/`，和 rstatistics 一樣內建在 rupy 裡）：`statistics`、`fractions`、`csv`、`io`（`StringIO`）、`datetime`、`pathlib`。
 
 ## 待補的標準函數庫（依優先順序）
 
@@ -23,7 +23,8 @@
 | 1 | ~~`math.gamma`、`lgamma`、`erf`、`erfc`、`fsum`、`atanh`、`asinh`、`acosh`~~ | 已完成（2026-11-14），見下方說明 |
 | 1 | ~~`json.loads`~~ | 已完成（2026-11-14），見下方說明 |
 | 2 | ~~`csv`、`io.StringIO`、`fractions`、`statistics`~~ | 已完成（2026-11-14），見下方說明 |
-| 2 | `datetime`、`pathlib`、`decimal` | 資料處理；`datetime` 可照搬 CPython 的 `_pydatetime.py`，`decimal` 工作量最大 |
+| 2 | ~~`datetime`、`pathlib`~~ | 已完成（2026-11-14），見下方說明 |
+| 2 | `decimal` | 任意精度的十進位運算與 context，工作量最大，留到最後 |
 | 3 | `string`、`textwrap`、`copy`、`operator`、`argparse` | 常用工具 |
 | 3 | `enum`（`dataclasses` 已可使用） | |
 | 4 | `base64`、`hashlib`、`struct`、`urllib.parse`、`uuid` | 編碼與雜湊 |
@@ -56,6 +57,12 @@
 - `csv`：照搬 CPython `_csv` 的狀態機與寫出規則。`reader`、`DictReader` 讀文字檔、`io.StringIO` 或字串串列；`writer`、`DictWriter` 寫到文字檔或 `io.StringIO`。
   - 限制：讀取用產生器實作，而 rupy 的產生器裡丟出的例外不能被呼叫端攔截，所以 `try: ... except csv.Error` 包住讀取的程式會在編譯時被拒絕。`QUOTE_NONNUMERIC` 讀取會產生 float，`DictReader` 欄位不足時 CPython 填 None，這兩種情況都直接報錯。
 - `io.StringIO`：`@shared` 類別，`csv.writer(buf)` 保留 `buf` 之後，原變數仍看得到寫入的內容。
+- `datetime`：照 CPython 的 `_pydatetime.py` 寫，錯誤訊息則以實際執行的 C 模組為準。只有 naive（沒有 tzinfo）的 `timedelta`、`date`、`time`、`datetime`。
+  - `timedelta` 的參數是 float，小數部分照 C 的 `delta_new` 只捨入一次；int 在 2**53 以內換成 float 不會失真。
+  - `strftime` 照 macOS C locale 的輸出；`strptime` 依 CPython 正規表示式中各選項的順序比對並回溯，所以「`unconverted data remains`」等錯誤訊息相同。
+  - 限制：`datetime` 不是 `date` 的子類別（`isinstance(dt, date)` 為 False）；`date` 不能當 dict 的鍵；`now()`、`today()` 取當地時間（wasm 上由 JavaScript 提供）。
+- `pathlib`：POSIX 的 `Path`。純路徑運算和 CPython 一樣；`parents`、`iterdir()`、`glob()` 回傳 list（CPython 是序列與產生器），`glob` 不支援 `**`，沒有 `parts`（長度不定的 tuple）。
+  - 檔案操作（`mkdir`、`iterdir`、`glob` 等）在 wasm 上不能用：wasm 主機只有檔案，沒有目錄（`tests/corpus/py/stdlib/pathlib_files.py` 標成 wasm skip）。
 - 配套的 rupy 變更：
   - 檔案改成共用的 handle（和 Python 一樣），所以 `csv.writer(f)` 可以保留 `f`。
   - `open(..., newline=...)`；讀檔預設把 `\r\n` 轉成 `\n`（之前沒轉）。
@@ -65,6 +72,11 @@
   - 超過 2**53 的 int / int 之前捨入兩次，現在只捨入一次。
   - 浮點數的 repr 之前可能和 CPython 差最後一位，例如 `1770740270910798.25` 印成 `.3`；現在取最短位數中最接近的值。
   - 套件裡 dataclass 的 repr 之前帶著 `PKG__` 前綴，現在拿掉了。
+- 第二批（datetime、pathlib）的配套變更：
+  - 方法的聯集回傳型別依位置對應聯集參數，例如 `__truediv__(self, other: timedelta | int) -> float | timedelta`。
+  - `a + b` 在 `a.__add__` 不收 `b` 時改用 `b.__radd__`（`timedelta + date`）。
+  - 套件改名時，類別裡的名字不再遮住方法裡的同名模組名稱（`datetime.date()` 方法與 `date` 類別）。
+  - wasm：`time.strftime` 由 JavaScript 主機提供；只從不會執行到的程式碼呼叫的套件函數，不再讓整支程式變成「不支援」。
 
 每個模組都要：
 
