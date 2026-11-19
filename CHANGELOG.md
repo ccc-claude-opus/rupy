@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 - An int that went into a float place (`x: float = 3`, `f(3)` for a float parameter, `[1, 2]`
   as `list[float]`) and is then printed is rejected: CPython prints `3`, rupy `3.0`. The new

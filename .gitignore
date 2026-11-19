@@ -31,3 +31,6 @@ dist/
 build/
 *.egg-info/
 __pycache__/
+
+# rucloud dev 的資料（IDE 在本機跑時）
+.rucloud/

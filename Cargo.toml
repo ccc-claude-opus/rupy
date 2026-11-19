@@ -1,6 +1,6 @@
 [package]
 name = "rupy"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A typed subset of Python compiled to readable Rust, or straight to WebAssembly, with numpy / scikit-learn / gymnasium / PyTorch subsets (formerly py0, the `ruai py` command)"
 license = "MIT"
